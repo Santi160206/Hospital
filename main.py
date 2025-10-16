@@ -8,7 +8,8 @@ from src.entities import __all__
 from Database.conexion import *
 from usuarios_iniciales import create_initial_users
 
-from src.routers import (auth, Medicamentos)
+from src.routers import (auth, Medicamentos,proveedores)
+
 
 
 app = FastAPI(
@@ -37,6 +38,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(Medicamentos.router)
+app.include_router(proveedores.router)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

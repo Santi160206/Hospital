@@ -34,4 +34,5 @@ class Medicamento(Base):
     Fecha_creacion = Column(DateTime, index=True)
     Fecha_actualizacion = Column(DateTime, index=True)
 
-  
+    # Relación con Proveedores
+    proveedores = relationship("Proveedor", back_populates="medicamento")
