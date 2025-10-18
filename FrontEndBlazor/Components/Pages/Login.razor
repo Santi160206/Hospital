@@ -1,0 +1,119 @@
+@page "/login"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IHttpClientFactory FabricaHttp
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@using System.Text.Json.Serialization;
+@using System.ComponentModel.DataAnnotations;
+
+<h3>Iniciar Sesión</h3>
+
+<EditForm Model="@credenciales" OnValidSubmit="@IniciarSesion">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+    
+    <div class="mb-3">
+        <label class="form-label">Usuario</label>
+        <InputText class="form-control" @bind-Value="credenciales.Username" />
+        <ValidationMessage For="@(() => credenciales.Username)" />
+    </div>
+    
+    <div class="mb-3">
+        <label class="form-label">Contraseña</label>
+        <InputText type="password" class="form-control" @bind-Value="credenciales.Password" />
+        <ValidationMessage For="@(() => credenciales.Password)" />
+    </div>
+    
+    <button class="btn btn-primary" type="submit" disabled="@cargando">
+        @(cargando ? "Iniciando..." : "Entrar")
+    </button>
+</EditForm>
+
+@code {
+    private CredencialesLogin credenciales = new();
+    private bool cargando = false;
+
+    private class CredencialesLogin
+    {
+        [Required(ErrorMessage = "El usuario es obligatorio")]
+        [JsonPropertyName("username")]
+        public string Username { get; set; } = "";
+        
+        [Required(ErrorMessage = "La contraseña es obligatoria")]
+        [JsonPropertyName("password")] 
+        public string Password { get; set; } = "";
+    }
+
+    private class TokenResponse
+    {
+        [JsonPropertyName("access_token")]
+        public string AccessToken { get; set; } = "";
+        
+        [JsonPropertyName("token_type")] 
+        public string TokenType { get; set; } = "";
+    }
+
+    private async Task IniciarSesion()
+    {
+        cargando = true;
+        StateHasChanged();
+    
+        try
+        {
+            var cliente = FabricaHttp.CreateClient("ApiBack");
+
+            var content = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("username", credenciales.Username),
+                new KeyValuePair<string, string>("password", credenciales.Password)
+            });
+
+            var respuesta = await cliente.PostAsync("auth/login", content);
+            var contenidoRespuesta = await respuesta.Content.ReadAsStringAsync();
+
+            Console.WriteLine($"📥 STATUS: {respuesta.StatusCode}");
+            Console.WriteLine($"📥 RESPUESTA: {contenidoRespuesta}");
+
+            if (!respuesta.IsSuccessStatusCode)
+            {
+                await MostrarMensaje("error", $"Error {respuesta.StatusCode}", contenidoRespuesta);
+                return;
+            }
+
+            var json = await respuesta.Content.ReadFromJsonAsync<TokenResponse>();
+            if (json is not null && !string.IsNullOrEmpty(json.AccessToken))
+            {
+                // ✅ Guardar token en localStorage
+                await JS.InvokeVoidAsync("localStorage.setItem", "token", json.AccessToken);
+
+                // Mostrar confirmación
+                await MostrarMensaje("success", "Éxito", "Inicio de sesión correcto");
+
+                // Esperar un poco antes de redirigir
+                await Task.Delay(500);
+
+                // Redirigir a MedicamentosPage
+                Nav.NavigateTo("/MedicamentosPage", forceLoad: true);
+            }
+            else
+            {
+                await MostrarMensaje("error", "Error", "El servidor no devolvió un token válido.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"💥 EXCEPCIÓN: {ex.Message}");
+            await MostrarMensaje("error", "Error inesperado", ex.Message);
+        }
+        finally
+        {
+            cargando = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task MostrarMensaje(string icon, string title, string text)
+    {
+        await JS.InvokeVoidAsync("Swal.fire", new { icon, title, text });
+    }
+}

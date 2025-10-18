@@ -1,0 +1,21 @@
+# Ignorar archivos y directorios específicos
+
+# Entorno virtual
+venv/
+.env/
+
+# Archivos temporales
+__pycache__/
+*.pyc
+*.pyo
+
+# Configuraciones locales
+*.env
+*.log
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Configuración de VS Code
+.vscode/

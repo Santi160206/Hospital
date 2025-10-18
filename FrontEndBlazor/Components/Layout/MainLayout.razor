@@ -4,11 +4,19 @@
     <div class="sidebar">
         <NavMenu />
     </div>
-
+    
     <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-        </div>
+        <header class="top-row px-4">
+            <nav class="nav-links">
+                <a href="login" class="nav-link">Login</a>
+                @*<a href="https://learn.microsoft.com/aspnet/core/" 
+                   target="_blank" 
+                   rel="noopener noreferrer"
+                   class="nav-link">
+                    About
+                </a>¨*@
+            </nav>
+        </header>
 
         <article class="content px-4">
             @Body
