@@ -1,0 +1,997 @@
+@page "/medicamentos"
+@using FrontEndBlazor.Models
+@using FrontEndBlazor.Services
+@inject IMedicamentoService MedicamentoService
+@inject IAuthService AuthService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Medicamentos</PageTitle>
+
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2>💊 Inventario de Medicamentos</h2>
+            <p class="text-muted">Gestión completa del catálogo de medicamentos</p>
+        </div>
+        <div>
+            <button class="btn btn-primary" @onclick="OpenCreateModal">
+                ➕ Agregar Medicamento
+            </button>
+            <button class="btn btn-outline-secondary ms-2" @onclick="LoadMedicamentos">
+                🔄 Recargar
+            </button>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <!-- Barra de búsqueda única con select de tipo de filtro -->
+                <div class="col-md-5">
+                    <label class="form-label">Buscar medicamento</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" @bind="textoBusqueda" @bind:event="oninput" 
+                               placeholder="@GetPlaceholderTexto()" />
+                        <select class="form-select" style="max-width: 180px;" @bind="tipoFiltro">
+                            <option value="nombre">📝 Nombre</option>
+                            <option value="presentacion">💊 Presentación</option>
+                            <option value="fabricante">🏭 Fabricante</option>
+                            <option value="lote">🔖 Lote</option>
+                        </select>
+                    </div>
+                    <small class="text-muted">Filtrando por: @GetTipoFiltroLabel()</small>
+                </div>
+
+                <!-- Estado -->
+                <div class="col-md-2">
+                    <label class="form-label">Estado</label>
+                    <select class="form-select" @bind="filtroEstado" @bind:event="oninput">
+                        <option value="">Todos (Admin)</option>
+                        <option value="ACTIVO">Solo Activos</option>
+                        <option value="INACTIVO">Solo Inactivos (Admin)</option>
+                    </select>
+                </div>
+
+                <!-- Stock Bajo -->
+                <div class="col-md-2">
+                    <label class="form-label">Opciones</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" @bind="filtroStockBajo" id="stockBajo">
+                        <label class="form-check-label" for="stockBajo">
+                            📉 Stock bajo
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Botón Buscar -->
+                <div class="col-md-2">
+                    <button class="btn btn-primary w-100" @onclick="AplicarFiltros">
+                        🔍 Buscar
+                    </button>
+                </div>
+
+                <!-- Botón Limpiar -->
+                <div class="col-md-1">
+                    <button class="btn btn-outline-secondary w-100" @onclick="LimpiarFiltros" title="Limpiar filtros">
+                        🗑️
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alertas -->
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            ✅ @successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = string.Empty"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            ❌ @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = string.Empty"></button>
+        </div>
+    }
+
+    <!-- Loading -->
+    @if (loading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-3">Cargando medicamentos...</p>
+        </div>
+    }
+    else if (medicamentos == null || !medicamentos.Any())
+    {
+        <div class="alert alert-info">
+            ℹ️ No se encontraron medicamentos.
+        </div>
+    }
+    else
+    {
+        <!-- Tabla -->
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Presentación</th>
+                                <th>Fabricante</th>
+                                <th>Lote</th>
+                                <th>Vencimiento</th>
+                                <th>Stock</th>
+                                <th>Precio</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var med in medicamentos)
+                            {
+                                <tr>
+                                    <td>
+                                        <strong>@med.Nombre</strong>
+                                        @if (!string.IsNullOrEmpty(med.PrincipioActivo))
+                                        {
+                                            <br /><small class="text-muted">@med.PrincipioActivo</small>
+                                        }
+                                    </td>
+                                    <td>@med.Presentacion</td>
+                                    <td>@med.Fabricante</td>
+                                    <td>@med.Lote</td>
+                                    <td>
+                                        @med.FechaVencimiento.ToString("yyyy-MM-dd")
+                                        <br />
+                                        <span class="@med.VencimientoBadgeClass">
+                                            @(med.EstaVencido ? "Vencido" : med.ProximoAVencer ? "Próximo" : "Vigente")
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @med.Stock
+                                        @if (med.StockBajo)
+                                        {
+                                            <br /><span class="badge bg-warning">Stock bajo</span>
+                                        }
+                                    </td>
+                                    <td>$@med.Precio.ToString("N2")</td>
+                                    <td><span class="@med.EstadoBadgeClass">@med.Estado</span></td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-info" @onclick="() => OpenDetailModal(med)" title="Ver detalle">
+                                                👁️
+                                            </button>
+                                            @if (med.Estado == "ACTIVO")
+                                            {
+                                                <button class="btn btn-warning" @onclick="() => OpenEditModal(med)" title="Editar">
+                                                    ✏️
+                                                </button>
+                                                <button class="btn btn-success" @onclick="() => OpenMovimientoModal(med)" title="Movimientos">
+                                                    📦
+                                                </button>
+                                                <button class="btn btn-danger" @onclick="() => OpenDeleteModal(med)" title="Eliminar">
+                                                    🗑️
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <!-- Solo admin puede ver/reactivar inactivos -->
+                                                <button class="btn btn-primary" @onclick="() => ReactivarMedicamento(med)" title="Reactivar">
+                                                    ♻️ Reactivar
+                                                </button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-3">
+                    <small class="text-muted">Mostrando @medicamentos.Count medicamento(s)</small>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Modal Crear/Editar -->
+@if (showFormModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(isEditMode ? "✏️ Editar Medicamento" : "➕ Crear Medicamento")</h5>
+                    <button type="button" class="btn-close" @onclick="CloseFormModal"></button>
+                </div>
+                <EditForm Model="formModel" OnValidSubmit="HandleFormSubmit">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Nombre *</label>
+                                <InputText class="form-control" @bind-Value="formModel.Nombre" />
+                                <ValidationMessage For="@(() => formModel.Nombre)" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Presentación *</label>
+                                <InputText class="form-control" @bind-Value="formModel.Presentacion" />
+                                <ValidationMessage For="@(() => formModel.Presentacion)" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Fabricante *</label>
+                                <InputText class="form-control" @bind-Value="formModel.Fabricante" />
+                                <ValidationMessage For="@(() => formModel.Fabricante)" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Lote *</label>
+                                <InputText class="form-control" @bind-Value="formModel.Lote" />
+                                <ValidationMessage For="@(() => formModel.Lote)" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Fecha Vencimiento *</label>
+                                <InputDate class="form-control" @bind-Value="formModel.FechaVencimiento" />
+                                <ValidationMessage For="@(() => formModel.FechaVencimiento)" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Stock *</label>
+                                <InputNumber class="form-control" @bind-Value="formModel.Stock" />
+                                <ValidationMessage For="@(() => formModel.Stock)" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Stock Mínimo</label>
+                                <InputNumber class="form-control" @bind-Value="formModel.MinimoStock" />
+                                <ValidationMessage For="@(() => formModel.MinimoStock)" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Precio</label>
+                                <InputNumber class="form-control" @bind-Value="formModel.Precio" />
+                                <ValidationMessage For="@(() => formModel.Precio)" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Principio Activo</label>
+                                <InputText class="form-control" @bind-Value="formModel.PrincipioActivo" />
+                                <ValidationMessage For="@(() => formModel.PrincipioActivo)" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseFormModal" disabled="@formSubmitting">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary" disabled="@formSubmitting">
+                            @if (formSubmitting)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            @(isEditMode ? "Actualizar" : "Crear")
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal Eliminar -->
+@if (showDeleteModal && selectedMedicamento != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">🗑️ Eliminar Medicamento</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseDeleteModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>¿Está seguro que desea eliminar el siguiente medicamento?</p>
+                    <div class="alert alert-warning">
+                        <strong>@selectedMedicamento.Nombre</strong><br />
+                        <small>
+                            @selectedMedicamento.Presentacion - @selectedMedicamento.Fabricante<br />
+                            Lote: @selectedMedicamento.Lote
+                        </small>
+                    </div>
+                    <p class="text-muted">
+                        <small>
+                            ⚠️ Si este medicamento tiene movimientos registrados, será marcado como inactivo en lugar de eliminarse.
+                        </small>
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDeleteModal" disabled="@deleteSubmitting">
+                        Cancelar
+                    </button>
+                    <button type="button" class="btn btn-danger" @onclick="HandleDelete" disabled="@deleteSubmitting">
+                        @if (deleteSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Eliminar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal Movimiento -->
+@if (showMovimientoModal && selectedMedicamento != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">📦 Registrar Movimiento</h5>
+                    <button type="button" class="btn-close" @onclick="CloseMovimientoModal"></button>
+                </div>
+                <EditForm Model="movimientoModel" OnValidSubmit="HandleMovimientoSubmit">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <strong>@selectedMedicamento.Nombre</strong><br />
+                            <small>Stock actual: @selectedMedicamento.Stock unidades</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Tipo de Movimiento *</label>
+                            <select class="form-select" @bind="movimientoModel.Tipo">
+                                <option value="ENTRADA">➕ Entrada (Agregar stock)</option>
+                                <option value="SALIDA">➖ Salida (Reducir stock)</option>
+                            </select>
+                            <ValidationMessage For="@(() => movimientoModel.Tipo)" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Cantidad *</label>
+                            <InputNumber class="form-control" @bind-Value="movimientoModel.Cantidad" />
+                            <ValidationMessage For="@(() => movimientoModel.Cantidad)" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Motivo</label>
+                            <InputText class="form-control" @bind-Value="movimientoModel.Motivo" 
+                                       placeholder="Ej: Venta, Compra, Ajuste de inventario..." />
+                            <ValidationMessage For="@(() => movimientoModel.Motivo)" />
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseMovimientoModal" disabled="@movimientoSubmitting">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary" disabled="@movimientoSubmitting">
+                            @if (movimientoSubmitting)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            Registrar
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal Detalle -->
+@if (showDetailModal && selectedMedicamento != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title">👁️ Detalle del Medicamento</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseDetailModal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Información Principal -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">📋 Información General</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <p><strong>Nombre:</strong> @selectedMedicamento.Nombre</p>
+                                    <p><strong>Presentación:</strong> @selectedMedicamento.Presentacion</p>
+                                    <p><strong>Fabricante:</strong> @selectedMedicamento.Fabricante</p>
+                                    <p><strong>Lote:</strong> @selectedMedicamento.Lote</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <p><strong>Fecha Vencimiento:</strong> @selectedMedicamento.FechaVencimiento.ToString("dd/MM/yyyy")</p>
+                                    <p><strong>Stock Actual:</strong> @selectedMedicamento.Stock unidades</p>
+                                    <p><strong>Stock Mínimo:</strong> @selectedMedicamento.MinimoStock unidades</p>
+                                    <p><strong>Precio:</strong> $@selectedMedicamento.Precio.ToString("N2")</p>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <p><strong>Principio Activo:</strong> @(selectedMedicamento.PrincipioActivo ?? "N/A")</p>
+                                    <p>
+                                        <strong>Estado:</strong> 
+                                        <span class="@selectedMedicamento.EstadoBadgeClass">@selectedMedicamento.Estado</span>
+                                        @if (selectedMedicamento.Estado == "INACTIVO")
+                                        {
+                                            <span class="text-danger ms-2">⚠️ Medicamento inactivo (no disponible para operaciones)</span>
+                                        }
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Auditoría -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">📝 Historial de Auditoría</h6>
+                        </div>
+                        <div class="card-body">
+                            @if (loadingDetail)
+                            {
+                                <div class="text-center">
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                    Cargando auditoría...
+                                </div>
+                            }
+                            else if (!auditLogs.Any())
+                            {
+                                <p class="text-muted">No hay registros de auditoría</p>
+                            }
+                            else
+                            {
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Fecha</th>
+                                                <th>Acción</th>
+                                                <th>Usuario</th>
+                                                <th>Detalles</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var log in auditLogs.OrderByDescending(l => l.Timestamp))
+                                            {
+                                                <tr>
+                                                    <td><small>@log.Timestamp.ToString("dd/MM/yyyy HH:mm")</small></td>
+                                                    <td><span class="badge bg-secondary">@log.Accion</span></td>
+                                                    <td><small>@(log.UsuarioId ?? "Sistema")</small></td>
+                                                    <td><small>@(log.Metadatos ?? "N/A")</small></td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Movimientos Recientes -->
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">📦 Movimientos Recientes (últimos 10)</h6>
+                        </div>
+                        <div class="card-body">
+                            @if (!movimientos.Any())
+                            {
+                                <p class="text-muted">No hay movimientos registrados</p>
+                            }
+                            else
+                            {
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Fecha</th>
+                                                <th>Tipo</th>
+                                                <th>Cantidad</th>
+                                                <th>Motivo</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var mov in movimientos.OrderByDescending(m => m.Fecha).Take(10))
+                                            {
+                                                <tr>
+                                                    <td><small>@mov.Fecha.ToString("dd/MM/yyyy HH:mm")</small></td>
+                                                    <td>
+                                                        @if (mov.Tipo == "ENTRADA")
+                                                        {
+                                                            <span class="badge bg-success">➕ Entrada</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge bg-danger">➖ Salida</span>
+                                                        }
+                                                    </td>
+                                                    <td><strong>@mov.Cantidad</strong></td>
+                                                    <td><small>@(mov.Motivo ?? "N/A")</small></td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDetailModal">
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<MedicamentoDto> medicamentos = new();
+    private bool loading = false;
+    private string successMessage = string.Empty;
+    private string errorMessage = string.Empty;
+
+    // Filtros
+    private string textoBusqueda = string.Empty;
+    private string tipoFiltro = "nombre"; // nombre, presentacion, fabricante, lote
+    private string filtroEstado = string.Empty;
+    private bool filtroStockBajo = false;
+
+    // Modal Crear/Editar
+    private bool showFormModal = false;
+    private bool isEditMode = false;
+    private bool formSubmitting = false;
+    private MedicamentoFormModel formModel = new();
+    private MedicamentoDto? selectedMedicamento;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // CRÍTICO: Asegurar que el token esté cargado ANTES de hacer peticiones
+            await AuthService.LoadTokenAsync();
+            
+            // Pequeña espera para asegurar que el token esté disponible
+            await Task.Delay(100);
+            
+            // Verificar autenticación
+            var isAuth = await AuthService.IsAuthenticatedAsync();
+            if (!isAuth)
+            {
+                NavigationManager.NavigateTo("/login", forceLoad: false);
+                return;
+            }
+            
+            // Ahora sí cargar medicamentos con token disponible
+            await LoadMedicamentos();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al inicializar: {ex.Message}";
+        }
+    }
+
+    private async Task LoadMedicamentos()
+    {
+        try
+        {
+            loading = true;
+            errorMessage = string.Empty;
+            
+            // Debug: Verificar autenticación antes de llamar API
+            var isAuthenticated = await AuthService.IsAuthenticatedAsync();
+            if (!isAuthenticated)
+            {
+                errorMessage = "No hay sesión activa. Por favor, inicie sesión nuevamente.";
+                NavigationManager.NavigateTo("/login", forceLoad: false);
+                return;
+            }
+            
+            medicamentos = await MedicamentoService.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al cargar medicamentos: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task AplicarFiltros()
+    {
+        try
+        {
+            loading = true;
+            errorMessage = string.Empty;
+            
+            // Aplicar filtro según tipo seleccionado
+            string? nombre = null;
+            string? fabricante = null;
+            string? lote = null;
+            
+            if (!string.IsNullOrWhiteSpace(textoBusqueda))
+            {
+                switch (tipoFiltro)
+                {
+                    case "nombre":
+                        nombre = textoBusqueda;
+                        break;
+                    case "presentacion":
+                        nombre = textoBusqueda; // El backend busca en nombre o presentación
+                        break;
+                    case "fabricante":
+                        fabricante = textoBusqueda;
+                        break;
+                    case "lote":
+                        lote = textoBusqueda;
+                        break;
+                }
+            }
+            
+            var estado = string.IsNullOrWhiteSpace(filtroEstado) ? null : filtroEstado;
+            
+            medicamentos = await MedicamentoService.GetAllAsync(
+                nombre: nombre,
+                fabricante: fabricante,
+                lote: lote,
+                estado: estado,
+                stockBajo: filtroStockBajo ? true : null
+            );
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al filtrar: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void CambiarTipoFiltro(string nuevoTipo)
+    {
+        tipoFiltro = nuevoTipo;
+        StateHasChanged();
+    }
+
+    private string GetTipoFiltroLabel()
+    {
+        return tipoFiltro switch
+        {
+            "nombre" => "📝 Nombre",
+            "presentacion" => "💊 Presentación",
+            "fabricante" => "🏭 Fabricante",
+            "lote" => "🔖 Lote",
+            _ => "📝 Nombre"
+        };
+    }
+
+    private string GetPlaceholderTexto()
+    {
+        return tipoFiltro switch
+        {
+            "nombre" => "Buscar por nombre...",
+            "presentacion" => "Buscar por presentación...",
+            "fabricante" => "Buscar por fabricante...",
+            "lote" => "Buscar por lote...",
+            _ => "Buscar..."
+        };
+    }
+
+    private void LimpiarFiltros()
+    {
+        textoBusqueda = string.Empty;
+        tipoFiltro = "nombre";
+        filtroEstado = string.Empty;
+        filtroStockBajo = false;
+        _ = LoadMedicamentos();
+    }
+
+    // Modal Crear
+    private void OpenCreateModal()
+    {
+        isEditMode = false;
+        formModel = new MedicamentoFormModel();
+        selectedMedicamento = null;
+        showFormModal = true;
+    }
+
+    // Modal Editar
+    private void OpenEditModal(MedicamentoDto med)
+    {
+        isEditMode = true;
+        selectedMedicamento = med;
+        formModel = new MedicamentoFormModel
+        {
+            Nombre = med.Nombre,
+            Fabricante = med.Fabricante,
+            Presentacion = med.Presentacion,
+            Lote = med.Lote,
+            FechaVencimiento = med.FechaVencimiento,
+            Stock = med.Stock,
+            MinimoStock = med.MinimoStock,
+            Precio = med.Precio,
+            PrincipioActivo = med.PrincipioActivo
+        };
+        showFormModal = true;
+    }
+
+    private void CloseFormModal()
+    {
+        showFormModal = false;
+        formModel = new();
+        selectedMedicamento = null;
+    }
+
+    private async Task HandleFormSubmit()
+    {
+        try
+        {
+            formSubmitting = true;
+            errorMessage = string.Empty;
+
+            if (isEditMode && selectedMedicamento != null)
+            {
+                var updateDto = new MedicamentoUpdateDto
+                {
+                    Nombre = formModel.Nombre,
+                    Fabricante = formModel.Fabricante,
+                    Presentacion = formModel.Presentacion,
+                    Lote = formModel.Lote,
+                    FechaVencimiento = formModel.FechaVencimiento,
+                    Stock = formModel.Stock,
+                    MinimoStock = formModel.MinimoStock,
+                    Precio = formModel.Precio,
+                    PrincipioActivo = formModel.PrincipioActivo
+                };
+
+                await MedicamentoService.UpdateAsync(selectedMedicamento.Id, updateDto);
+                successMessage = "Medicamento actualizado exitosamente";
+            }
+            else
+            {
+                var createDto = new MedicamentoCreateDto
+                {
+                    Nombre = formModel.Nombre,
+                    Fabricante = formModel.Fabricante,
+                    Presentacion = formModel.Presentacion,
+                    Lote = formModel.Lote,
+                    FechaVencimiento = formModel.FechaVencimiento ?? DateTime.Today,
+                    Stock = formModel.Stock,
+                    MinimoStock = formModel.MinimoStock,
+                    Precio = formModel.Precio,
+                    PrincipioActivo = formModel.PrincipioActivo
+                };
+
+                await MedicamentoService.CreateAsync(createDto);
+                successMessage = "Medicamento creado exitosamente";
+            }
+
+            CloseFormModal();
+            await LoadMedicamentos();
+        }
+        catch (InvalidOperationException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            formSubmitting = false;
+        }
+    }
+
+    // Modal Eliminar
+    private bool showDeleteModal = false;
+    private bool deleteSubmitting = false;
+
+    private void OpenDeleteModal(MedicamentoDto med)
+    {
+        selectedMedicamento = med;
+        showDeleteModal = true;
+    }
+
+    private void CloseDeleteModal()
+    {
+        showDeleteModal = false;
+        selectedMedicamento = null;
+    }
+
+    private async Task HandleDelete()
+    {
+        if (selectedMedicamento == null) return;
+
+        try
+        {
+            deleteSubmitting = true;
+            errorMessage = string.Empty;
+
+            var result = await MedicamentoService.DeleteAsync(selectedMedicamento.Id);
+
+            if (result.Deleted)
+            {
+                successMessage = "Medicamento eliminado exitosamente";
+            }
+            else if (result.Dependencias > 0)
+            {
+                successMessage = $"Medicamento inactivado (tiene {result.Dependencias} movimiento(s) registrado(s))";
+            }
+
+            CloseDeleteModal();
+            await LoadMedicamentos();
+        }
+        catch (InvalidOperationException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al eliminar: {ex.Message}";
+        }
+        finally
+        {
+            deleteSubmitting = false;
+        }
+    }
+
+    // Modal Movimiento
+    private bool showMovimientoModal = false;
+    private bool movimientoSubmitting = false;
+    private MovimientoFormModel movimientoModel = new();
+
+    private void OpenMovimientoModal(MedicamentoDto med)
+    {
+        selectedMedicamento = med;
+        movimientoModel = new MovimientoFormModel();
+        showMovimientoModal = true;
+    }
+
+    private void CloseMovimientoModal()
+    {
+        showMovimientoModal = false;
+        movimientoModel = new();
+        selectedMedicamento = null;
+    }
+
+    private async Task HandleMovimientoSubmit()
+    {
+        if (selectedMedicamento == null) return;
+
+        try
+        {
+            movimientoSubmitting = true;
+            errorMessage = string.Empty;
+
+            var dto = new MovimientoCreateDto
+            {
+                Tipo = movimientoModel.Tipo,
+                Cantidad = movimientoModel.Cantidad,
+                Motivo = movimientoModel.Motivo
+            };
+
+            await MedicamentoService.CreateMovimientoAsync(selectedMedicamento.Id, dto);
+            successMessage = $"Movimiento de {movimientoModel.Tipo} registrado exitosamente";
+
+            CloseMovimientoModal();
+            await LoadMedicamentos();
+        }
+        catch (InvalidOperationException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al registrar movimiento: {ex.Message}";
+        }
+        finally
+        {
+            movimientoSubmitting = false;
+        }
+    }
+
+    // Modal Detail
+    private bool showDetailModal = false;
+    private List<AuditLogDto> auditLogs = new();
+    private List<MovimientoDto> movimientos = new();
+    private bool loadingDetail = false;
+
+    private async Task OpenDetailModal(MedicamentoDto med)
+    {
+        selectedMedicamento = med;
+        showDetailModal = true;
+        await LoadAuditoria(med.Id);
+        await LoadMovimientos(med.Id);
+    }
+
+    private void CloseDetailModal()
+    {
+        showDetailModal = false;
+        selectedMedicamento = null;
+        auditLogs = new();
+        movimientos = new();
+    }
+
+    private async Task LoadAuditoria(string medicamentoId)
+    {
+        try
+        {
+            loadingDetail = true;
+            auditLogs = await MedicamentoService.GetAuditLogsAsync(medicamentoId);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al cargar auditoría: {ex.Message}";
+        }
+        finally
+        {
+            loadingDetail = false;
+        }
+    }
+
+    private async Task LoadMovimientos(string medicamentoId)
+    {
+        try
+        {
+            movimientos = await MedicamentoService.GetMovimientosAsync(medicamentoId);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al cargar movimientos: {ex.Message}";
+        }
+    }
+
+    // Reactivar medicamento inactivo (solo admin)
+    private async Task ReactivarMedicamento(MedicamentoDto med)
+    {
+        try
+        {
+            errorMessage = string.Empty;
+            
+            // Confirmación
+            if (!await ConfirmarReactivacion(med))
+                return;
+            
+            var result = await MedicamentoService.ReactivateAsync(med.Id);
+            
+            if (result.Reactivated)
+            {
+                successMessage = $"Medicamento '{med.Nombre}' reactivado exitosamente";
+                await LoadMedicamentos();
+            }
+            else
+            {
+                errorMessage = "No se pudo reactivar el medicamento";
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al reactivar: {ex.Message}";
+        }
+    }
+
+    private async Task<bool> ConfirmarReactivacion(MedicamentoDto med)
+    {
+        // Por ahora retorna true. En producción se puede usar un modal de confirmación
+        return await Task.FromResult(true);
+    }
+
+    // Modelos de formulario
+    public class MedicamentoFormModel : MedicamentoCreateDto { }
+    public class MovimientoFormModel : MovimientoCreateDto { }
+}

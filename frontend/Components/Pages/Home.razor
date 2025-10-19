@@ -1,0 +1,85 @@
+@page "/"
+@using FrontEndBlazor.Services
+@inject IAuthService AuthService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Sistema de Inventario</PageTitle>
+
+@code {
+    private bool isLoading = true;
+    private bool isAuthenticated = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // AuthenticationGate ya cargó el token, solo verificar autenticación
+        isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        isLoading = false;
+    }
+
+    private async Task HandleLogout()
+    {
+        await AuthService.LogoutAsync();
+    }
+}
+
+@if (isLoading)
+{
+    <div class="container mt-5 text-center">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Cargando...</span>
+        </div>
+        <p class="mt-3">Verificando acceso...</p>
+    </div>
+}
+else if (!isAuthenticated)
+{
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card border-danger">
+                    <div class="card-body text-center">
+                        <div class="mb-4">
+                            <span style="font-size: 4rem;">🔒</span>
+                        </div>
+                        <h3 class="card-title text-danger mb-3">Acceso Requerido</h3>
+                        <p class="card-text mb-4">
+                            Esta página requiere autenticación. Por favor, inicia sesión con tu cuenta
+                            o crea una nueva cuenta para acceder al sistema de inventario.
+                        </p>
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                            <NavLink href="login" class="btn btn-primary btn-lg px-4">
+                                Iniciar Sesión
+                            </NavLink>
+                            <NavLink href="register" class="btn btn-outline-primary btn-lg px-4">
+                                Crear Cuenta
+                            </NavLink>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+<div class="container mt-5">
+    <div class="text-center mb-5">
+        <h1 class="display-4">🏠 Sistema de Inventario</h1>
+        <p class="lead text-muted">Bienvenido al sistema</p>
+    </div>
+
+    <div class="card">
+        <div class="card-body text-center">
+            <h5 class="card-title">✅ Sesión Iniciada</h5>
+            <p class="card-text">Has iniciado sesión correctamente. El sistema está listo para usar.</p>
+        </div>
+    </div>
+
+    <div class="text-center mt-5">
+        <button class="btn btn-danger" @onclick="HandleLogout">
+            Cerrar Sesión
+        </button>
+    </div>
+</div>
+}
+

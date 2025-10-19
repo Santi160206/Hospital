@@ -1,0 +1,420 @@
+================================================================================
+                    PATRONES DE DISEÑO YA IMPLEMENTADOS
+================================================================================
+
+PROYECTO: Sistema de Control de Inventario de Medicamentos
+BACKEND: FastAPI + SQLAlchemy
+FECHA: Octubre 2025
+
+================================================================================
+                          1. REPOSITORY PATTERN
+================================================================================
+
+DEFINICIÓN:
+-----------
+Patrón que abstrae el acceso a datos, proporcionando una interfaz para 
+realizar operaciones CRUD sin exponer los detalles de la base de datos.
+
+PROPÓSITO:
+----------
+- Desacoplar la lógica de negocio de la persistencia de datos
+- Facilitar el testing (se pueden mockear repositories)
+- Centralizar queries de base de datos en un solo lugar
+- Permitir cambiar la fuente de datos sin afectar la lógica de negocio
+
+IMPLEMENTACIÓN EN EL PROYECTO:
+-------------------------------
+
+Interfaces (Abstracción):
+  └─ backend/repositories/interfaces/
+      ├─ medicamento_repository.py    → IMedicamentoRepository
+      └─ movimiento_repository.py     → IMovimientoRepository
+
+Implementaciones Concretas:
+  └─ backend/repositories/
+      ├─ medicamento_repo.py          → MedicamentoRepository
+      └─ movimiento_repo.py           → MovimientoRepository
+
+
+EJEMPLO CONCRETO:
+-----------------
+
+// Interface (Contrato)
+class IMedicamentoRepository(Protocol):
+    def get(self, med_id: str) -> Optional[Medicamento]
+    def list(self) -> List[Medicamento]
+    def create(self, m: Medicamento) -> Medicamento
+    def update(self, m: Medicamento) -> Medicamento
+    def find_by_search_key(self, search_key: str, ...) -> Optional[Medicamento]
+
+// Implementación
+class MedicamentoRepository(IMedicamentoRepository):
+    def __init__(self, db: Session):
+        self.db = db  # SQLAlchemy session
+    
+    def get(self, med_id: str) -> Optional[Medicamento]:
+        return self.db.query(Medicamento).filter(
+            Medicamento.id == med_id
+        ).first()
+    
+    def create(self, m: Medicamento) -> Medicamento:
+        self.db.add(m)
+        # NO hace commit aquí (responsabilidad del Service Layer)
+        return m
+
+
+USO EN EL PROYECTO:
+-------------------
+Archivo: backend/services/medicamento_service.py
+
+    class MedicamentoService:
+        def __init__(self, db: Session, medicamento_repo: IMedicamentoRepository = None):
+            # Inyección de dependencias (Dependency Injection Pattern)
+            self.medicamento_repo = medicamento_repo or MedicamentoRepository(db)
+        
+        def get(self, med_id: str):
+            # Usa repository, no accede directamente a la BD
+            return self.medicamento_repo.get(med_id)
+
+
+BENEFICIOS OBSERVADOS:
+----------------------
+✓ Service Layer NO conoce detalles de SQLAlchemy
+✓ Fácil hacer testing con mock repositories
+✓ Se pueden crear dos repositorios: MedicamentoRepository y MovimientoRepository
+✓ Cumple SOLID: Dependency Inversion Principle (DIP)
+✓ Cumple SOLID: Interface Segregation Principle (ISP)
+
+
+UBICACIÓN DE ARCHIVOS:
+----------------------
+backend/repositories/
+  ├── interfaces/
+  │   ├── __init__.py
+  │   ├── medicamento_repository.py      ← Interface IMedicamentoRepository
+  │   └── movimiento_repository.py       ← Interface IMovimientoRepository
+  ├── interfaces.py                      ← Re-export (compatibilidad)
+  ├── medicamento_repo.py                ← MedicamentoRepository (implementación)
+  └── movimiento_repo.py                 ← MovimientoRepository (implementación)
+
+
+================================================================================
+                        2. SERVICE LAYER PATTERN
+================================================================================
+
+DEFINICIÓN:
+-----------
+Patrón que encapsula la lógica de negocio en una capa intermedia entre 
+la presentación (routes/controllers) y el acceso a datos (repositories).
+
+PROPÓSITO:
+----------
+- Centralizar reglas de negocio en un solo lugar
+- Coordinar múltiples operaciones de repositories
+- Manejar transacciones (commit/rollback)
+- Reutilizar lógica de negocio desde diferentes endpoints
+- Mantener controllers/routes delgados y enfocados en HTTP
+
+IMPLEMENTACIÓN EN EL PROYECTO:
+-------------------------------
+
+Services:
+  └─ backend/services/
+      ├── medicamento_service.py        → MedicamentoService
+      └── user_service.py               → UserService
+
+
+EJEMPLO CONCRETO:
+-----------------
+
+Archivo: backend/services/medicamento_service.py
+
+class MedicamentoService:
+    """Service con lógica de negocio de medicamentos"""
+    
+    def __init__(self, db: Session, medicamento_repo, movimiento_repo):
+        self.db = db
+        self.medicamento_repo = medicamento_repo
+        self.movimiento_repo = movimiento_repo
+    
+    def registrar_movimiento(self, med_id, tipo, cantidad, usuario_id, motivo):
+        """
+        Lógica de negocio compleja:
+        1. Validar medicamento activo
+        2. Validar fecha no vencida
+        3. Validar stock suficiente (si es SALIDA)
+        4. Actualizar stock
+        5. Crear movimiento
+        6. Crear audit log
+        7. Todo en una transacción atómica
+        """
+        
+        # Obtener medicamento
+        m = self.medicamento_repo.get(med_id)
+        if not m:
+            return {'ok': False, 'reason': 'not_found'}
+        
+        # Regla de negocio: no permitir movimientos en lotes inactivos
+        if m.estado != EstadoEnum.ACTIVO:
+            return {'ok': False, 'reason': 'inactive'}
+        
+        # Regla de negocio: no permitir movimientos en lotes vencidos
+        if m.fecha_vencimiento < date.today():
+            return {'ok': False, 'reason': 'expired'}
+        
+        # Regla de negocio: validar stock suficiente para salidas
+        if tipo == 'SALIDA' and m.stock < cantidad:
+            return {'ok': False, 'reason': 'insufficient_stock', 
+                    'available': m.stock}
+        
+        # Coordinar múltiples repositories
+        try:
+            # Actualizar stock
+            if tipo == 'ENTRADA':
+                m.stock += cantidad
+            else:
+                m.stock -= cantidad
+            
+            # Crear movimiento
+            mv = Movimiento(medicamento_id=m.id, tipo=tipo, 
+                          cantidad=cantidad, usuario_id=usuario_id)
+            self.movimiento_repo.create_movimiento(mv)
+            self.medicamento_repo.update(m)
+            
+            # Flush para obtener ID
+            self.db.flush()
+            
+            # Crear audit log
+            al = AuditLog(entidad='movimientos', entidad_id=mv.id, 
+                         usuario_id=usuario_id, accion='CREATE')
+            self.db.add(al)
+            
+            # Commit de toda la transacción
+            self.db.commit()
+            
+            return {'ok': True, 'movimiento': mv, 'stock': m.stock}
+        
+        except Exception:
+            # Rollback en caso de error
+            self.db.rollback()
+            return {'ok': False, 'reason': 'error'}
+
+
+USO DESDE ROUTES:
+-----------------
+Archivo: backend/routes/medicamentos.py
+
+    @router.post("/{med_id}/movimientos", response_model=MovimientoOut)
+    def crear_movimiento(
+        med_id: str, 
+        payload: MovimientoCreate,
+        service: MedicamentoService = Depends(get_medicamento_service),
+        user: dict = Depends(get_current_user)
+    ):
+        """
+        Route/Controller delgado: solo maneja HTTP
+        - Recibe request
+        - Llama al service (lógica de negocio)
+        - Retorna response con status code apropiado
+        """
+        
+        # Delegar al service (NO tiene lógica de negocio aquí)
+        res = service.registrar_movimiento(
+            med_id, 
+            payload.tipo.upper(), 
+            payload.cantidad,
+            usuario_id=user.get('sub'),
+            motivo=payload.motivo
+        )
+        
+        # Solo manejo de errores HTTP
+        if res.get('ok') is False:
+            reason = res.get('reason')
+            if reason == 'not_found':
+                raise HTTPException(status_code=404, detail='Medicamento no encontrado')
+            if reason == 'inactive' or reason == 'expired':
+                raise HTTPException(status_code=400, detail='Lote inactivo o vencido')
+            if reason == 'insufficient_stock':
+                avail = res.get('available', 0)
+                raise HTTPException(status_code=400, 
+                    detail=f'Stock disponible: {avail}. No se registró el movimiento.')
+        
+        return res.get('movimiento')
+
+
+RESPONSABILIDADES CLARAS:
+--------------------------
+
+┌─────────────────────────────────────────────────────────┐
+│  ROUTES (Capa de Presentación)                          │
+│  - Recibir HTTP requests                                │
+│  - Validar datos de entrada (Pydantic)                  │
+│  - Autenticación/Autorización                           │
+│  - Delegar a Service Layer                              │
+│  - Mapear errores de negocio a HTTP status codes        │
+│  - Retornar HTTP responses                              │
+└─────────────────────────────────────────────────────────┘
+                          ↓ usa
+┌─────────────────────────────────────────────────────────┐
+│  SERVICE LAYER (Lógica de Negocio)                      │
+│  - Validaciones de reglas de negocio                    │
+│  - Coordinar múltiples repositories                     │
+│  - Manejar transacciones (commit/rollback)              │
+│  - Cálculos de negocio                                  │
+│  - Auditoría                                            │
+│  - Retornar resultados de negocio (no HTTP)             │
+└─────────────────────────────────────────────────────────┘
+                          ↓ usa
+┌─────────────────────────────────────────────────────────┐
+│  REPOSITORY LAYER (Acceso a Datos)                      │
+│  - Queries a base de datos                              │
+│  - CRUD básico                                          │
+│  - NO contiene lógica de negocio                        │
+│  - NO hace commits (deja eso al Service)                │
+└─────────────────────────────────────────────────────────┘
+
+
+BENEFICIOS OBSERVADOS:
+----------------------
+✓ Routes son delgadas (solo HTTP)
+✓ Lógica de negocio reutilizable desde múltiples endpoints
+✓ Fácil testear lógica de negocio sin HTTP
+✓ Transacciones manejadas correctamente
+✓ Cumple SOLID: Single Responsibility Principle (SRP)
+✓ Cumple SOLID: Dependency Inversion Principle (DIP)
+
+
+EJEMPLOS DE LÓGICA DE NEGOCIO EN SERVICE:
+------------------------------------------
+
+1. Validación de fecha de vencimiento (crear_medicamento):
+   if payload.fecha_vencimiento < date.today():
+       raise ValueError('Fecha inválida')
+
+2. Detección de duplicados case-insensitive (crear_medicamento):
+   search_key = normalize_text(nombre) + "|" + normalize_text(fabricante)
+   existing = repo.find_by_search_key(search_key)
+   if existing:
+       raise DuplicateError()
+
+3. Soft-delete con dependencias (delete_medicamento):
+   count = movimiento_repo.count_movimientos(med_id)
+   if count > 0:
+       # No eliminar, solo marcar inactivo
+       m.estado = INACTIVO
+   else:
+       m.is_deleted = True
+
+4. Auditoría automática (update_medicamento):
+   for field, old, new in audit_entries:
+       al = AuditLog(campo=field, valor_anterior=old, valor_nuevo=new)
+       db.add(al)
+
+
+UBICACIÓN DE ARCHIVOS:
+----------------------
+backend/services/
+  ├── medicamento_service.py           ← MedicamentoService
+  └── user_service.py                  ← UserService
+
+
+================================================================================
+                           RELACIÓN ENTRE PATRONES
+================================================================================
+
+Repository Pattern + Service Layer Pattern trabajan juntos:
+
+1. Route recibe request HTTP
+   ↓
+2. Route valida autenticación/autorización
+   ↓
+3. Route llama a Service Layer
+   ↓
+4. Service ejecuta lógica de negocio
+   ↓
+5. Service usa Repositories para persistencia
+   ↓
+6. Repositories acceden a base de datos
+   ↓
+7. Service hace commit/rollback de transacción
+   ↓
+8. Service retorna resultado al Route
+   ↓
+9. Route mapea resultado a HTTP response
+
+
+EJEMPLO COMPLETO DE FLUJO:
+---------------------------
+
+POST /api/medicamentos/{id}/movimientos
+  ↓
+routes/medicamentos.py::crear_movimiento()
+  ↓
+service.registrar_movimiento(id, tipo, cantidad, usuario_id, motivo)
+  ↓
+MedicamentoService.registrar_movimiento():
+  - medicamento_repo.get(id)           [Repository Pattern]
+  - Validar reglas de negocio          [Service Layer]
+  - movimiento_repo.create_movimiento()  [Repository Pattern]
+  - medicamento_repo.update()          [Repository Pattern]
+  - db.commit()                        [Service Layer - Transacción]
+  ↓
+Retorna resultado al route
+  ↓
+Route retorna HTTP 200 OK + MovimientoOut
+
+
+================================================================================
+                              CONCLUSIÓN
+================================================================================
+
+PATRONES YA IMPLEMENTADOS Y FUNCIONANDO:
+
+✓ Repository Pattern
+  - Abstrae acceso a datos
+  - Implementado en: MedicamentoRepository, MovimientoRepository
+  - Con interfaces: IMedicamentoRepository, IMovimientoRepository
+
+✓ Service Layer Pattern
+  - Encapsula lógica de negocio
+  - Implementado en: MedicamentoService, UserService
+  - Coordina repositories y maneja transacciones
+
+PRINCIPIOS SOLID APLICADOS:
+
+✓ Single Responsibility Principle (SRP)
+  - Cada capa tiene una responsabilidad clara
+
+✓ Open/Closed Principle (OCP)
+  - Puedes extender sin modificar (herencia, composición)
+
+✓ Liskov Substitution Principle (LSP)
+  - Interfaces permiten sustitución de implementaciones
+
+✓ Interface Segregation Principle (ISP)
+  - Interfaces segregadas: IMedicamentoRepository ≠ IMovimientoRepository
+
+✓ Dependency Inversion Principle (DIP)
+  - Service depende de interfaces (IMedicamentoRepository), no de concretos
+
+
+HISTORIAS DE USUARIO SOPORTADAS:
+
+✓ HU-1.01 (CRUD): Service Layer maneja creación, actualización, eliminación
+✓ HU-1.02 (Movimientos): Service Layer coordina stock + movimientos + auditoría
+✓ HU-1.03 (Búsqueda): Repository implementa métodos de búsqueda especializados
+
+
+ARCHIVOS CLAVE:
+
+backend/repositories/interfaces/medicamento_repository.py
+backend/repositories/interfaces/movimiento_repository.py
+backend/repositories/medicamento_repo.py
+backend/repositories/movimiento_repo.py
+backend/services/medicamento_service.py
+backend/routes/medicamentos.py
+
+
+================================================================================
+FIN DEL DOCUMENTO
+================================================================================
