@@ -1,7 +1,7 @@
 import sys
 import os
 
-# Ensure project root is on sys.path so `database` package is importable
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
@@ -33,7 +33,7 @@ if __name__ == '__main__':
         else:
             print('No se encontraron duplicados. Creando índice/constraint único...')
             try:
-                # Add unique constraint via ALTER TABLE (SQL Server syntax)
+           
                 session.execute(text('ALTER TABLE medicamentos ADD CONSTRAINT uq_medicamentos_search_key UNIQUE (search_key);'))
                 session.commit()
                 print('Constraint único creado correctamente.')

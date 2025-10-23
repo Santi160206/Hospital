@@ -1,6 +1,6 @@
 import requests
 BASE='http://127.0.0.1:8000'
-# get token
+
 r = requests.post(f'{BASE}/api/auth/token', data={'username':'admin','password':'Admin123!'})
 if r.status_code!=200:
     print('auth failed', r.status_code, r.text)

@@ -30,9 +30,9 @@ try:
     except Exception:
         traceback.print_exc()
 
-    # Now test registrar_movimiento
+    
     print('\n-- registrar_movimiento test --')
-    # create new medicamento for movimiento
+    
     m2 = models.Medicamento(nombre='Mv1', fabricante='F', presentacion='P', lote='L', fecha_vencimiento=datetime.date(2030,1,1), stock=50, minimo_stock=0, search_key='mv1|p|f|l')
     s.add(m2)
     s.commit()

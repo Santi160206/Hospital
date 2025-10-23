@@ -18,7 +18,7 @@ class UserService:
         return self.db.query(models.User).filter(models.User.role == models.UserRoleEnum.ADMIN).count()
 
     def create_admin(self, payload: dict) -> models.User:
-        # payload must include hashed_password and necessary fields
+        
         payload['role'] = models.UserRoleEnum.ADMIN
         return self.create_user(payload)
 

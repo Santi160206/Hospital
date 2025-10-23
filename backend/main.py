@@ -28,10 +28,8 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(medicamentos.router, prefix="/api/medicamentos", tags=["medicamentos"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
-# app.include_router(alertas.router, prefix="/api/alertas", tags=["alertas"])  # Por implementar después
 
 
-# NOTE: Removed OpenAPI Bearer/Authorize button per request (no security scheme added)
 
 @app.get("/")
 async def root():
@@ -40,9 +38,7 @@ async def root():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # create tables at startup
     Base.metadata.create_all(bind=engine)
-    # ensure at least one admin exists
     try:
         from services.user_service import UserService
         from auth.passwords import hash_password
@@ -52,7 +48,7 @@ async def lifespan(app: FastAPI):
         usvc = UserService(db)
         admin_count = usvc.count_admins()
         if admin_count == 0:
-            # attempt to create admin from environment variables
+            
             admin_user = os.getenv('ADMIN_USERNAME')
             admin_pass = os.getenv('ADMIN_PASSWORD')
             admin_email = os.getenv('ADMIN_EMAIL')
@@ -72,26 +68,22 @@ async def lifespan(app: FastAPI):
             else:
                 print('WARNING: No admin user exists and ADMIN_* env vars are not set. Please create an admin via the protected /api/users/create_admin endpoint or set ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL.')
     except Exception as _:
-        # do not fail startup if admin creation check error occurs; log and continue
+       
         pass
     yield
 
 
 app.router.lifespan_context = lifespan
 
-# Serve frontend static files when they are published to backend/static
+
 STATIC_DIR = Path(__file__).parent.joinpath('static')
 if STATIC_DIR.exists():
     app.mount('/', StaticFiles(directory=str(STATIC_DIR), html=True), name='static')
 
-    
-@app.on_event("shutdown")
-def shutdown_event():
-    print("Eliminando tablas antes de cerrar...")
-    Base.metadata.drop_all(bind=engine)
+
 
 if __name__ == '__main__':
-    # Allow running directly with: python main.py
+    
     host = os.getenv('HOST', '127.0.0.1')
     port = int(os.getenv('PORT', 8000))
     reload = os.getenv('RELOAD', 'True').lower() in ('1','true','yes')
