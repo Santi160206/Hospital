@@ -1,0 +1,17 @@
+@* RENDERMODE A NIVEL DE ROUTER: Todo comparte UN SOLO circuito de Blazor Server *@
+@rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
+
+<Router AppAssembly="typeof(Program).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <PageTitle>Not found</PageTitle>
+        <div class="container mt-5 text-center">
+            <h1>404 - Página no encontrada</h1>
+            <p>La página que buscas no existe.</p>
+            <NavLink href="" class="btn btn-primary">Volver al inicio</NavLink>
+        </div>
+    </NotFound>
+</Router>

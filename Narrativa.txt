@@ -1,0 +1,311 @@
+
+
+--- Página 1 ---
+
+Narrativa del sistema de control de inventario de medicamentos  
+ 
+1. Sistema actual  
+ 
+Actualmente, la clínica maneja el inventario de medicamentos de forma manual. El 
+personal de farmacia utiliza hojas de cálculo en Excel para registrar las entradas y salidas 
+de medicamentos, mientras que la información de stock se actualiza manualmente al 
+final de cada día laborable.  
+Problemática identificada:  
+- Control manual propenso a errores:  Los registros manuales generan 
+inconsistencias y errores de transcripción  
+- Falta de control de stock en tiempo real:  La información no se actualiza 
+inmediatamente  
+- Ausencia de alertas automatizadas:  No hay notificaciones cuando los 
+medicamentos están por agotarse  
+- Búsquedas lentas e ineficientes:  Localizar medicamentos específicos r equiere 
+revisar múltiples documentos  
+- Pérdidas económicas:  Medicamentos vencidos o mal gestionados generan 
+pérdidas significativas  
+- Falta de análisis de ventas:  No se puede analizar patrones de consumo ni 
+tendencias de venta  
+- Gestión deficiente de proveedores : No existe control centralizado de 
+proveedores ni historial de compras  
+- Proceso de compras ineficiente:  Las órdenes de compra se manejan 
+manualmente sin seguimiento  
+ 
+2. Requerimientos del usuario (RU)  
+RU-01: Registro y gestión de medicamentos  
+El sistema debe permitir administrar el catálogo de medicamentos, pudiendo agregarlos, 
+leerlos, actualizarlos y eliminarlos, incluyendo el registro de movimientos de stock y la 
+consulta rápida de la disponibilidad y la información relevante de cada medicamento.  
+ 
+RU-02: Sistema de alertas de stock  
+El sistema debe avisar a los usuarios sobre eventos relevantes relacionados con el 
+inventario (por ejemplo, baja disponibilidad, vencimientos de los medicamentos) y 
+permitir ajustes en los criterios de alerta.  
+ 
+RU-03: Histori al y análisis de ventas  
+El sistema debe conservar el historial de ventas y ofrecer herramientas para generar 
+reportes y análisis que faciliten la toma de decisiones sobre ventas y rotación de 
+productos.  
+ 
+ 
+ 
+ 
+
+--- Página 2 ---
+
+RU-04: Gestión de proveedores y compras  
+El sistema debe permitir gestionar información de proveedores y el ciclo de compras 
+(órdenes, recepción y seguimiento), así como facilitar comparaciones y control de las 
+adquisiciones.  
+ 
+3. Actores  
+3.1: Actores Internos (Usuarios del Sistema)  
+3.1.1: Farmacéutico  
+Tipo:  Actor Primario - Usuario Interno  
+Descripción:  
+Profesional de la salud encargado de la operación diaria de la farmacia. Es 
+el usuario más frecuente del sistema y maneja las operaciones de 
+inventario del día a día.  
+ 
+Características:  
+- Person al de farmacia con conocimientos técnicos en medicamentos  
+- Usuario operativo que interactúa constantemente con el sistema  
+- Responsable del despacho directo de medicamentos a pacientes  
+- Requiere acceso rápido y eficiente a la información de stock  
+ 
+Responsabili dades:  
+- Registrar entradas de medicamentos al inventario  
+- Procesar salidas de medicamentos por ventas o dispensación  
+- Consultar disponibilidad de stock en tiempo real  
+- Buscar medicamentos por nombre comercial, principio activo o lote  
+- Visualizar y gestionar alertas de stock bajo y vencimientos  
+- Verificar fechas de vencimiento de lotes  
+- Registrar ventas diarias  
+- Validar información de medicamentos antes de despachar  
+ 
+Interacciones con el Sistema:  
+- Crea: Registros de medicamentos, movimientos de inventario 
+(entradas/salidas), ventas  
+- Consulta: Disponibilidad de stock, información de medicamentos, 
+alertas activas, historial de movimientos  
+- Actualiza: Información de medicamentos, estado de alertas (marcar 
+como vistas)  
+- Elimina: Medicamentos obsoletos  
+ 
+3.1.2: Admi nistrador  
+Tipo:  Actor Primario - Usuario Interno  
+Descripción:  
+Usuario con privilegios completos sobre el sistema. Es responsable de la 
+configuración, gestión de usuarios, generación de reportes estratégicos y 
+supervisión general del inventario.  
+ 
+
+--- Página 3 ---
+
+Caracterís ticas:  
+- Personal directivo o supervisor de la clínica  
+- Tiene conocimientos del negocio y toma decisiones estratégicas  
+- Acceso completo a todas las funcionalidades del sistema  
+- Responsable de la configuración y parámetros del sistema  
+ 
+Responsabilidades:  
+- Configurar umbrales de stock mínimo por medicamento  
+- Establecer días de anticipación para alertas de vencimiento  
+- Gestionar usuarios del sistema (crear, modificar, desactivar)  
+- Asignar roles y permisos a usuarios  
+- Generar reportes analíticos y ejecutivos  
+- Anali zar tendencias de ventas y consumo  
+- Supervisar estado general del inventario  
+- Revisar y resolver alertas críticas  
+- Configurar parámetros globales del sistema  
+- Auditar operaciones realizadas por otros usuarios  
+ 
+Interacciones con el Sistema:  
+- Crea: Usuarios, conf iguraciones de alertas, reportes personalizados  
+- Consulta: Todos los datos del sistema, reportes, estadísticas, logs 
+de auditoría  
+- Actualiza: Configuraciones globales, umbrales de stock, parámetros 
+de alertas, información de usuarios  
+- Elimina: medicamentos descontinuados  
+ 
+3.1.3: Responsable de Compras  
+Tipo:  Actor Primario - Usuario Interno  
+Descripción:  
+Usuario especializado en la gestión de proveedores, adquisiciones y control 
+de la cadena de suministro. Es el responsable de mantener el inventario 
+abastecido  mediante órdenes de compra estratégicas.  
+ 
+Características:  
+- Personal del área de compras o logística  
+- Conocimiento de proveedores y precios del mercado  
+- Negociar con proveedores  
+- Responsable de optimizar costos de adquisición  
+ 
+Responsabilidades:  
+- Gestionar inf ormación de proveedores (alta, modificación, baja)  
+- Crear y gestionar órdenes de compra  
+- Hacer seguimiento del estado de entregas  
+- Registrar recepciones de medicamentos  
+- Comparar precios entre proveedores  
+- Analizar histórico de compras  
+
+--- Página 4 ---
+
+- Identificar mejores opcio nes de proveedores  
+- Responder a alertas de stock bajo con reposiciones  
+- Negociar con proveedores basándose en datos históricos  
+- Generar reportes de compras por período  
+- Detectar y gestionar retrasos en entregas  
+ 
+Interacciones con el Sistema:  
+- Crea: Proveedores,  órdenes de compra, recepciones de 
+medicamentos  
+- Consulta: Alertas de stock bajo, historial de compras, comparativos 
+de precios, estado de órdenes  
+- Actualiza: Información de proveedores, estado de órdenes de 
+compra, recepciones  
+- Elimina: Proveedores inactivos  (soft delete)  
+ 
+4. Requerimientos del sistema (RS)  
+4.1 Requisitos funcionales (RF)  
+RF-01: Registro y gestión de medicamentos  
+- RF-01.1:  El sistema debe  dejar crear, consultar, actualizar y eliminar 
+medicamentos (CRUD)  
+- RF-01.2: Debe registrar entradas de medicamentos actualizando el stock 
+automáticamente  
+- RF-01.3: Debe procesar salidas de medicamentos validando disponibilidad  
+- RF-01.4: Debe controlar fechas de vencimiento y números de lote  
+- RF-01.5: Debe permitir búsquedas por nomb re comercial, principio activo o 
+lote 
+ 
+RF-02: Sistema de alertas de stock  automatizado  
+- RF-02.1: Debe monitorear automáticamente los niveles de stock de cada 
+medicamento y generar alertas cuando la cantidad disponible sea igual o 
+menor al stock mínimo establecido, sin necesidad de intervención manual  
+- RF-02.2: Debe enviar notificaciones automáticas y diferenciadas a los 
+usuarios autorizados (administradores, farmacéuticos, responsables de 
+compras)  
+- RF-02.3:  Debe detectar medicamentos próximos a vencer y g enerar alertas 
+preventivas con al menos X días de antelación configurable. Además, el 
+sistema debe priorizar y clasificar estas alertas por nivel de importancia (ej. 
+stock agotado, stock bajo, vencimiento próximo, vencimiento inminente) 
+para facilitar la g estión.  
+- RF-02.4:  Debe mantener un historial de alertas generadas (fecha, tipo de 
+alerta, usuario notificado y acción realizada)  
+ 
+RF-03: Historial y análisis de ventas  
+- RF-03.1:  El sistema debe registrar automáticamente todas las ventas de 
+medicamentos  
+
+--- Página 5 ---
+
+- RF-03.2:  Debe mantener historial completo con fecha, cantidad, precio y 
+usuario  
+- RF-03.3:  Debe generar reportes de ventas por período seleccionable  
+- RF-03.4: Debe generar proyecciones de demanda basadas en históricos  
+ 
+RF-04: Gestión de proveedores y compras  
+- RF-04.1:  El sistema debe permitir registrar y gestionar información de 
+proveedores  
+- RF-04.2:  Debe mantener historial detallado de compras por proveedor  
+- RF-04.3:  Debe permitir crear, editar y gestionar órdenes de compra  
+- RF-04.4:  Debe realizar seguimiento del  estado de entregas y pedidos  
+- RF-04.5:  Debe generar análisis comparativo de precios entre proveedores  
+- RF-04.6: Debe generar reportes de compras por período y proveedor  
+- RF-04.7: Debe alertar sobre pedidos pendientes y retrasos en entregas  
+- RF-04.8: Debe mantener historial de todos los movimientos de entrada y 
+salida  
+ 
+4.2 Requisitos no funcionales (RNF)  
+RNF-01: Rendimiento  
+- RNF-01.1:  El sistema debe responder a consultas en menos de 2 segundos  
+- RNF-01.2:  Debe soportar hasta 50 usuarios simultáneos  
+ 
+RNF-02: Seguridad  
+- RNF-02.1:  El sistema debe implementar autenticación de usuarios  
+- RNF-02.2:  Debe mantener control de acceso basado en roles  
+- RNF-02.3:  Debe encriptar datos sensibles  
+- RNF-02.4:  Debe mantener log de auditoría de todas las operaciones  
+ 
+RNF-03: Disponibilidad  
+- RNF-03.1:  El sistema debe estar disponible 24/7  
+- RNF-03.2:  Debe tener mecanismos de respaldo y recuperación  
+ 
+RNF-04: Usabilidad  
+- RNF-04.1:  La interfaz debe ser intuitiva y fácil de usar  
+- RNF-04.2: Debe mostrar alertas visuales en el dashboard  principal  
+ 
+RNF-05: Escalabilidad  
+- RNF-05.1:  El sistema debe poder expandirse para manejar más 
+medicamentos  
+- RNF-05.2:  Debe soportar integración con otros sistemas  
+- RNF-05.3:  Debe permitir configuración flexible de parámetros  
+- RNF-05.4: El sistema debe permitir configurar niveles mínimos de stock por 
+medicamento  
+- RNF-05.5:  Debe permitir configurar días de anticipación para alertas de 
+vencimiento  
+ 
+
+--- Página 6 ---
+
+RNF-06: Integridad de datos  
+- RNF-06.1:  Debe mantener consistencia de datos en todas las operac iones  
+- RNF-06.2:  Debe realizar respaldos automáticos periódicos  
+- RNF-06.3:  Debe validar integridad de datos críticos  
+- RNF-07: Analítica y reportes  
+- RNF-07.1:  Debe calcular estadísticas de consumo y tendencias de venta  
+- RNF-07.2:  Debe calcular rentabilidad y márgenes de ganancia por 
+medicamento  
+ 
+5. Beneficios esperados  
+ 
+Beneficios operacionales:  
+- Reducción del 90% en errores de inventario  
+- Disminución del 60% en tiempo de búsqueda de medicamentos  
+- Automatización del 90% de reportes internos  
+- Reducción del 50% en pérdidas por medicamentos vencidos  
+- Mejora del 70% en tiempo de procesamiento de ventas  
+- Optimización del 40% en proceso de compras y gestión de proveedores  
+ 
+Beneficios económicos:  
+- Optimización de inversión en inventario  
+- Reducci ón de costos operacionales  
+- Mejor rotación de stock  
+- Análisis predictivo para compras más eficientes  
+- Mejor negociación con proveedores basada en datos históricos  
+- Reducción de costos por optimización de compras  
+ 
+Beneficios estratégicos:  
+- Mejora en la calidad d el servicio  
+- Toma de decisiones basada en datos  
+- Mejor control de la cadena de suministro  
+- Relaciones comerciales más sólidas con proveedores  
+- Mayor competitividad en el mercado  
+ 
+6. Alcance del proyecto  
+ 
+Incluye:  
+- Módulo CRUD de medicamentos con búsquedas avanzadas  
+- Módulo de gestión de entradas y salidas de inventario  
+- Sistema de alertas automatizado de stock y vencimientos  
+- Módulo de historial y análisis de ventas  
+- Módulo de gestión de proveedores y compras  
+- Interfaz web responsiva  
+- Dashboard con indicadores cl ave de inventario  
+ 
+
+--- Página 7 ---
+
+No incluye:  
+- Integración con sistemas de facturación externa  
+- Módulo de prescripciones médicas  
+- Sistema de contabilidad integrado  
+- Gestión de personal y nómina  
+- Control de caja y arqueos  
+ 
+
+--- Página 8 ---
+
+ 
+https://miro.com/welcomeonboard/cmROMlRpT2dKb3VzOGg4YWtwbkFhUXFUa1Q0U
+EpNa2NiaGd1WFhFd3NHVGFNU2lzT3l6Sk0rbGh4OWd4K092bm1KRTJGMEtLZTlKcF
+lLMGJUUEFDb3dLQ0l4TXhKc1ZhUVFsMUs2d2E3bUxGcEdDQ0pWOGR3WlBpdGZs
+UWJhRHNNakdSWkpBejJWRjJhRnhhb1UwcS 9BPT0hdjE=?share_link_id=215750384
+928 
