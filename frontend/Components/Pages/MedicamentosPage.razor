@@ -29,11 +29,12 @@
 
     <!-- Filtros -->
     <div class="card mb-4">
-        <div class="card-body">
-            <div class="d-flex flex-wrap align-items-center gap-3">
-                <!-- Barra de búsqueda única con select de tipo de filtro -->
-                <div class="d-flex flex-column" style="min-width: 340px;">
-                    <label class="form-label">Buscar medicamento</label>
+        <div class="busqueda-container p-3 rounded" style="background-color: #e5e5e5;">
+            <div class="d-flex flex-wrap align-items-end gap-4">
+                <!-- 🔍 Buscar medicamento -->
+                <div class="d-flex flex-column position-relative" style="min-width: 340px;">
+                    <label class="form-label fw-semibold mb-1">Buscar medicamento</label>
+
                     <div class="position-relative">
                         <input type="text"
                             id="busquedaInput"
@@ -43,8 +44,7 @@
                             placeholder="@GetPlaceholderTexto()"
                             @onkeydown="DetectarTecla" />
 
-                        <select class="form-select"
-                                style="max-width: 180px; position: absolute; right: -190px; top: 0;"
+                        <select class="form-select filtro-select"
                                 @bind="tipoFiltro">
                             <option value="nombre">📝 Nombre</option>
                             <option value="presentacion">💊 Presentación</option>
@@ -66,13 +66,12 @@
                         }
                     </div>
 
-                    <small class="text-muted">Filtrando por: @GetTipoFiltroLabel()</small>
-
+                    <small class="text-muted mt-1">Filtrando por: @GetTipoFiltroLabel()</small>
                 </div>
 
-                <!-- Estado -->
+                <!-- ⚙️ Estado -->
                 <div class="d-flex flex-column" style="min-width: 160px;">
-                    <label class="form-label">Estado</label>
+                    <label class="form-label fw-semibold mb-1">Estado</label>
                     <select class="form-select" @bind="filtroEstado" @bind:event="oninput">
                         <option value="">Todos (Admin)</option>
                         <option value="ACTIVO">Solo Activos</option>
@@ -80,9 +79,9 @@
                     </select>
                 </div>
 
-                <!-- Stock Bajo -->
+                <!-- 📉 Stock Bajo -->
                 <div class="d-flex flex-column justify-content-center" style="min-width: 130px;">
-                    <label class="form-label">Opciones</label>
+                    <label class="form-label fw-semibold mb-1">Opciones</label>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" @bind="filtroStockBajo" id="stockBajo">
                         <label class="form-check-label" for="stockBajo">
@@ -91,16 +90,12 @@
                     </div>
                 </div>
 
-                <!-- Botón Buscar -->
-                <div class="col-md-2">
-                    <button class="btn btn-search w-100" @onclick="AplicarFiltros">
+                <!-- 🔘 Botones -->
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-success d-flex align-items-center px-4" @onclick="AplicarFiltros">
                         🔍 Buscar
                     </button>
-                </div>
-
-                <!-- Botón Limpiar -->
-                <div class="col-md-1">
-                    <button class="btn btn-clean w-100" @onclick="LimpiarFiltros" title="Limpiar filtros">
+                    <button class="btn btn-outline-secondary d-flex align-items-center" @onclick="LimpiarFiltros" title="Limpiar filtros">
                         🗑️
                     </button>
                 </div>

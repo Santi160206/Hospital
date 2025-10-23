@@ -413,6 +413,26 @@ html, body {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
 }
+/* acomoda el select del filtro pegado al input */
+.filtro-select {
+    position: absolute;
+    right: -190px;
+    top: 0;
+    max-width: 180px;
+}
+
+/* mejora responsividad */
+@media (max-width: 992px) {
+    .filtro-select {
+        position: static;
+        width: 100%;
+        margin-top: 6px;
+    }
+
+    .busqueda-container .d-flex.flex-wrap {
+        gap: 1rem !important;
+    }
+}
 
 /* ============== SwetAlert2 Customization =============== */
 .swal-btn-ok {
