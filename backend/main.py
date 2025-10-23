@@ -84,7 +84,11 @@ STATIC_DIR = Path(__file__).parent.joinpath('static')
 if STATIC_DIR.exists():
     app.mount('/', StaticFiles(directory=str(STATIC_DIR), html=True), name='static')
 
-
+    
+@app.on_event("shutdown")
+def shutdown_event():
+    print("Eliminando tablas antes de cerrar...")
+    Base.metadata.drop_all(bind=engine)
 
 if __name__ == '__main__':
     # Allow running directly with: python main.py
