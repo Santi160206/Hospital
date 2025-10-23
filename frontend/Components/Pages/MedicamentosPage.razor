@@ -30,48 +30,42 @@
     <!-- Filtros -->
     <div class="card mb-4">
         <div class="busqueda-container p-3 rounded" style="background-color: #e5e5e5;">
-            <div class="d-flex flex-wrap align-items-end gap-4">
-                <!-- 🔍 Buscar medicamento -->
-                <div class="d-flex flex-column position-relative" style="min-width: 340px;">
-                    <label class="form-label fw-semibold mb-1">Buscar medicamento</label>
+            <label class="form-label busqueda-label">Buscar medicamento</label>
+            <div class="d-flex flex-wrap align-items-end gap-3">
+                <!-- 🔍 Input + Filtro -->
+                <div class="position-relative d-flex align-items-center flex-grow-1" style="min-width: 320px;">
+                    <input type="text"
+                        id="busquedaInput"
+                        class="form-control"
+                        @bind="textoBusquedaAuto"
+                        @bind:event="oninput"
+                        placeholder="@GetPlaceholderTexto()"
+                        @onkeydown="DetectarTecla" />
 
-                    <div class="position-relative">
-                        <input type="text"
-                            id="busquedaInput"
-                            class="form-control"
-                            @bind="textoBusquedaAuto"
-                            @bind:event="oninput"
-                            placeholder="@GetPlaceholderTexto()"
-                            @onkeydown="DetectarTecla" />
+                    <select class="form-select filtro-select" @bind="tipoFiltro">
+                        <option value="nombre">📝 Nombre</option>
+                        <option value="presentacion">💊 Presentación</option>
+                        <option value="fabricante">🏭 Fabricante</option>
+                        <option value="lote">🔖 Lote</option>
+                    </select>
 
-                        <select class="form-select filtro-select"
-                                @bind="tipoFiltro">
-                            <option value="nombre">📝 Nombre</option>
-                            <option value="presentacion">💊 Presentación</option>
-                            <option value="fabricante">🏭 Fabricante</option>
-                            <option value="lote">🔖 Lote</option>
-                        </select>
-
-                        @if (sugerencias.Any() && mostrarSugerencias)
-                        {
-                            <div class="autocomplete-suggestions">
-                                @foreach (var s in sugerencias)
-                                {
-                                    <div class="suggestion-item @(sugerencias.IndexOf(s) == indiceSeleccionado ? "suggestion-hover" : "")"
-                                        @onclick="() => SeleccionarSugerencia(s)">
-                                        @s
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
-
-                    <small class="text-muted mt-1">Filtrando por: @GetTipoFiltroLabel()</small>
+                    @if (sugerencias.Any() && mostrarSugerencias)
+                    {
+                        <div class="autocomplete-suggestions">
+                            @foreach (var s in sugerencias)
+                            {
+                                <div class="suggestion-item @(sugerencias.IndexOf(s) == indiceSeleccionado ? "suggestion-hover" : "")"
+                                    @onclick="() => SeleccionarSugerencia(s)">
+                                    @s
+                                </div>
+                            }
+                        </div>
+                    }
                 </div>
 
                 <!-- ⚙️ Estado -->
                 <div class="d-flex flex-column" style="min-width: 160px;">
-                    <label class="form-label fw-semibold mb-1">Estado</label>
+                    <label class="form-label mb-1">Estado</label>
                     <select class="form-select" @bind="filtroEstado" @bind:event="oninput">
                         <option value="">Todos (Admin)</option>
                         <option value="ACTIVO">Solo Activos</option>
@@ -81,7 +75,7 @@
 
                 <!-- 📉 Stock Bajo -->
                 <div class="d-flex flex-column justify-content-center" style="min-width: 130px;">
-                    <label class="form-label fw-semibold mb-1">Opciones</label>
+                    <label class="form-label mb-1">Opciones</label>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" @bind="filtroStockBajo" id="stockBajo">
                         <label class="form-check-label" for="stockBajo">
@@ -92,15 +86,18 @@
 
                 <!-- 🔘 Botones -->
                 <div class="d-flex align-items-center gap-2">
-                    <button class="btn btn-success d-flex align-items-center px-4" @onclick="AplicarFiltros">
+                    <button class="btn btn-search d-flex align-items-center px-4" @onclick="AplicarFiltros">
                         🔍 Buscar
                     </button>
-                    <button class="btn btn-outline-secondary d-flex align-items-center" @onclick="LimpiarFiltros" title="Limpiar filtros">
+                    <button class="btn btn-clean d-flex align-items-center" @onclick="LimpiarFiltros" title="Limpiar filtros" disabled="@loading">
                         🗑️
                     </button>
                 </div>
             </div>
+
+            <small class="text-muted mt-2">Filtrando por: @GetTipoFiltroLabel()</small>
         </div>
+
     </div>
 
     <!-- Alertas -->
@@ -572,6 +569,8 @@
     private bool formSubmitting = false;
     private MedicamentoFormModel formModel = new();
     private MedicamentoDto? selectedMedicamento;
+    private MedicamentoDto? originalMedicamento; // copia medicamento original para comparar cambios
+
 
     protected override async Task OnInitializedAsync()
     {
@@ -722,6 +721,15 @@
         // Convertir el resultado
         return result?.ToString()?.Contains("isConfirmed") ?? false;
     }
+    private async Task MostrarWarning(string mensaje)
+    {
+        await JS.InvokeVoidAsync("Swal.fire", new {
+            icon = "warning",
+            title = "Advertencia",
+            text = mensaje,
+            confirmButtonText = "Cerrar"
+        });
+    }
 
     private void CambiarTipoFiltro(string nuevoTipo)
     {
@@ -759,16 +767,7 @@
         tipoFiltro = "nombre";
         filtroEstado = string.Empty;
         filtroStockBajo = false;
-        _ = LoadMedicamentos();
-    }
-
-    // Modal Crear
-    private async Task OpenCreateModal()
-    {
-        isEditMode = false;
-        formModel = new MedicamentoFormModel();
-        selectedMedicamento = null;
-        showFormModal = true;
+        await LoadMedicamentos();
     }
 
     private List<string> sugerencias = new();
@@ -789,7 +788,6 @@
         }
     }
 
-    // Nuevo método sin parámetros que usa textoBusqueda
     private async Task BuscarSugerenciasAsync()
     {
         // cancelar búsquedas previas
@@ -868,11 +866,37 @@
         }
     }
 
+    // Modal Crear
+    private async Task OpenCreateModal()
+    {
+        isEditMode = false;
+        formModel = new MedicamentoFormModel();
+        selectedMedicamento = null;
+        showFormModal = true;
+    }
+
     // Modal Editar
     private void OpenEditModal(MedicamentoDto med)
     {
         isEditMode = true;
         selectedMedicamento = med;
+
+        // Guarda una copia original para comparar después
+        originalMedicamento = new MedicamentoDto
+        {
+            Id = med.Id,
+            Nombre = med.Nombre,
+            Fabricante = med.Fabricante,
+            Presentacion = med.Presentacion,
+            Lote = med.Lote,
+            FechaVencimiento = med.FechaVencimiento,
+            Stock = med.Stock,
+            MinimoStock = med.MinimoStock,
+            Precio = med.Precio,
+            PrincipioActivo = med.PrincipioActivo
+        };
+
+        // 🔧 Llena el formulario como siempre
         formModel = new MedicamentoFormModel
         {
             Nombre = med.Nombre,
@@ -885,8 +909,10 @@
             Precio = med.Precio,
             PrincipioActivo = med.PrincipioActivo
         };
+
         showFormModal = true;
     }
+
 
     private void CloseFormModal()
     {
@@ -904,6 +930,13 @@
 
             if (isEditMode && selectedMedicamento != null)
             {
+                //  Verificar si hubo cambios
+                if (!HuboCambios(formModel, originalMedicamento))
+                {
+                    await MostrarWarning("No se detectaron cambios. Actualiza algún campo antes de guardar.");
+                    return; // Evita seguir con la actualización
+                }
+
                 var updateDto = new MedicamentoUpdateDto
                 {
                     Nombre = formModel.Nombre,
@@ -955,6 +988,23 @@
             formSubmitting = false;
         }
     }
+    
+    private bool HuboCambios(MedicamentoFormModel actual, MedicamentoDto? original)
+    {
+        if (original == null) return true;
+
+        return
+            actual.Nombre != original.Nombre ||
+            actual.Presentacion != original.Presentacion ||
+            actual.Fabricante != original.Fabricante ||
+            actual.Lote != original.Lote ||
+            actual.FechaVencimiento != original.FechaVencimiento ||
+            actual.Stock != original.Stock ||
+            actual.MinimoStock != original.MinimoStock ||
+            actual.Precio != original.Precio ||
+            actual.PrincipioActivo != original.PrincipioActivo;
+    }
+
 
     // Modal Eliminar
     private bool showDeleteModal = false;

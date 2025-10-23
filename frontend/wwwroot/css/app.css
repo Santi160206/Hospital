@@ -377,7 +377,7 @@ html, body {
     color: var(--color-text-invert) !important;
 }
 
-/* ================== AUTOCOMPLETE CUSTOMIZATION =============== */
+/* ================== AUTOCOMPLETE N SEARCH PANEL CUSTOMIZATION =============== */
 .autocomplete-suggestions {
     position: absolute;
     top: 100%;
@@ -404,8 +404,9 @@ html, body {
 }
 
 .suggestion-hover, .suggestion-item:hover {
-    background-color: var(--color-primary);
-    color: white;
+    background-color: #d0e1f8;
+    color: var(--color-text);
+    text-decoration: solid;
 }
 
 /* Ajustar el input cuando hay sugerencias */
@@ -413,26 +414,37 @@ html, body {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
 }
-/* acomoda el select del filtro pegado al input */
-.filtro-select {
-    position: absolute;
-    right: -190px;
-    top: 0;
-    max-width: 180px;
+
+/* Organización visual */
+.busqueda-container .d-flex.flex-wrap {
+    align-items: end;
+    gap: 1.25rem;
 }
 
-/* mejora responsividad */
+.filtro-select {
+    margin-left: 8px;
+    max-width: 150px;
+}
+
+/* 📱 Responsivo */
 @media (max-width: 992px) {
+    .busqueda-container .d-flex.flex-wrap {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
     .filtro-select {
-        position: static;
         width: 100%;
+        margin-left: 0;
         margin-top: 6px;
     }
-
-    .busqueda-container .d-flex.flex-wrap {
-        gap: 1rem !important;
-    }
 }
+
+label.form-label.busqueda-label {
+    font-size: 1.3rem;
+    font-weight: 600;
+}
+
 
 /* ============== SwetAlert2 Customization =============== */
 .swal-btn-ok {
