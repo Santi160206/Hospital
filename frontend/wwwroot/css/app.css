@@ -1,0 +1,458 @@
+html, body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+:root {
+  --color-primary: #A3C4F3; 
+  --color-bg-rgb: #E0F0FF; /* mismos valores del color anterior, se usará para un poco de transparencia */
+  --color-primary-dark: #5A84C9; 
+  --color-secondary: #B8E0D2; 
+  --color-accent: #F4A896;
+  --color-error: #E57373;
+  --color-bg: #F9F9F9;
+  --color-surface: #E5E5E5; /* para tarjetas y paneles */
+  --color-text: #333333;
+  --color-text-secondary: #666666;
+  --color-text-invert: #FFFFFF;
+}
+
+/* ================== BARRA DE NAVEGACIÓN ===================== */
+.navbar-custom {
+  background-color: var(--color-primary-dark) !important;
+  color: var(--color-text-invert);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  padding: 0.5rem 1rem;
+  border-bottom: none;
+}
+/* Asegurar que el container-fluid también tenga el color */
+.navbar-custom .container-fluid {
+  background-color: var(--color-primary-dark) !important;
+  padding: 0;
+}
+/* Color para el botón toggler */
+.navbar-custom .navbar-toggler {
+  border-color: var(--color-text-invert);
+}
+.navbar-custom .navbar-brand {
+    color: var(--color-text-invert);
+    font-weight: 600;
+}
+.navbar-custom .nav-link {
+    color: var(--color-text-invert);
+}
+.navbar-custom .nav-link.active {
+    background-color: var(--color-primary);
+    border-radius: 8px;
+}
+
+/* IMPORTANTE: Anular display: none de Bootstrap collapse */
+.collapse:not(.show) {
+    display: block !important;
+    transform: translateX(-100%);
+}
+
+.collapse.show {
+    display: block !important;
+    transform: translateX(0);
+}
+
+/* En desktop, mostrar siempre */
+@media (min-width: 768px) {
+    .collapse:not(.show) {
+        transform: translateX(0);
+    }
+    
+    .navbar-toggler {
+        display: none !important;
+    }
+}
+.nav-scrollable .nav-link {
+    color: var(--color-text);
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    margin: 0.125rem 0.5rem;
+    display: flex;
+    align-items: center;
+}
+.logo-hospital {
+    width: 40px;
+    height: auto;
+    max-height: 40px;
+    object-fit: scale-down;
+}
+
+.icono-hospital {
+    color: var(--color-secondary);
+    font-size: 1.25rem;
+    margin-right: 0.5rem;
+}
+
+.nav-link {
+    color: var(--color-text);
+    padding: 0.6rem 1rem;
+    border-radius: 0.375rem;
+    margin: 0.125rem 0.5rem;
+}
+
+.nav-link.active {
+    background-color: var(--color-primary-dark);
+    color: var(--color-text-invert);
+}
+
+/* Asegurar que el contenido principal no se solape */
+@media (min-width: 768px) {
+    .main-content {
+        margin-left: 220px;
+    }
+}
+
+/* ===================== PANEL LATERAL ========================== */ 
+/*.nav-scrollable { /* Maneja el scroll del sidebar
+    position: fixed;
+    top: 56px;
+    left: 0;
+    height: calc(100vh - 56px);
+    width: 220px;
+    overflow-y: auto;
+    z-index: 1020;
+    transition: all 0.3s ease-in-out;
+    background-color: var(--color-primary) !important; /* COLOR EN TODO EL SIDEBAR
+}
+*/
+.sidebar-custom {
+    background-color: var(--color-primary) !important; 
+}
+
+/* Asegurar que el nav también herede el color */
+.sidebar-custom nav {
+    background-color: var(--color-primary) !important;
+    height: 100%;
+}
+
+/* Los items del menú */
+.sidebar-custom .nav-item {
+    margin-bottom: 0.125rem;
+    background-color: transparent !important; /* Transparente para que se vea el fondo */
+}
+
+.sidebar-custom .nav-link {
+    color: var(--color-text) !important;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 15px;
+    text-decoration: none;
+    border-radius: 6px;
+    margin: 0 8px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    background-color: transparent !important; /* Fondo transparente */
+}
+
+.sidebar-custom .nav-link:hover {
+    background-color: #E0F0FF80 !important; /* más suave el bg-rgb */
+    color: var(--color-text-secondary) !important;
+    transform: translateX(4px);
+    transition: all 0.2s ease-in-out;
+}
+
+.sidebar-custom .nav-link.active {
+    background-color: #E0f0ffAD !important; /* un poco más visible el bg-rgb*/
+    color: var(--color-text-secondary) !important;
+    font-weight: 600;
+    box-shadow: inset 2px 0 0 var(--color-bg-rgb), 0 2px 4px rgba(0, 0, 0, 0.05);
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.sidebar-custom .nav-link i {
+    font-size: 1.25rem;
+    line-height: 1;
+    width: 24px;
+    text-align: center;
+}
+
+/* ===================== TITLES ========================= */
+.title-style {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+}
+
+/* ===================== CARDS ========================== */
+/* Contenedor de la tarjeta */
+.card {
+  background-color: var(--color-surface);
+  border: none;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+/* Encabezado de la tabla - más específico */
+.table thead tr:first-child {
+  background-color: var(--color-primary) !important;
+  color: var(--color-text) !important;
+  border-bottom: 2px solid var(--color-primary-dark);
+  text-align: center;
+}
+
+/* Celdas del encabezado */
+.table thead th {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+  border: none;
+  border-right: 1px solid var(--color-primary-dark);
+  background-color: transparent !important; /* Importante para que herede del tr */
+  position: relative;
+}
+/* Eliminar el borde derecho del último th */
+.table thead th:last-child {
+  border-right: none;
+}
+
+/* Filas */
+.table tbody tr {
+  background-color: var(--color-surface);
+  transition: background-color 0.2s ease;
+}
+
+/* Hover de filas */
+.table-hover tbody tr:hover {
+  background-color: var(--color-primary);
+}
+
+/* Celdas */
+.table td {
+  color: var(--color-text-secondary);
+  vertical-align: middle;
+  border-color: #ccc;
+}
+
+/* Texto principal dentro de celdas */
+.table td strong {
+  color: var(--color-text);
+}
+
+/* Badges personalizados*/
+.badge {
+  border-radius: 6px;
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  font-weight: 600; /* Para mejor legibilidad */
+  text-transform: uppercase; /* Para consistencia */
+}
+
+/* Badge para Vencido */
+.badge.bg-danger {
+  background-color: var(--color-error) !important;
+  color: white !important;
+}
+
+/* Badge para Próximo */
+.badge.bg-warning {
+  background-color: #ffcc02 !important;
+  color: var(--color-text-secondary) !important;
+}
+
+/* Badge para Vigente */
+.badge.bg-success {
+  background-color: #28a745 !important;
+  color: white !important;
+}
+
+/* Badge para Stock bajo (ya lo tienes) */
+.badge.bg-warning {
+  background-color: var(--color-accent);
+  color: var(--color-text-secondary);
+}
+
+/* Estados */
+.vencido {
+  background-color: var(--color-error);
+  color: var(--color-text-invert);
+}
+.proximo {
+  background-color: var(--color-accent);
+  color: var(--color-text-invert);
+}
+.vigente {
+  background-color: var(--color-secondary);
+  color: var(--color-text);
+}
+
+/* ======================= BUTTONS ============================= */
+.btn-primary {
+  background-color: var(--color-secondary);
+  color: var(--color-text);
+  border: var(--color-text);
+}
+.btn-primary:hover {
+  background-color: #B8E0D2AA;
+  color: var(--color-text-secondary);
+  border: var(--color-secondary);
+}
+.btn-primary:active {
+  background-color: #2ad085 !important;
+  color: var(--color-text-invert) !important;
+  transition: background-color 0.3s ease;
+}
+
+.btn-add {
+  background-color: rgba(var(--color-primary), 0.8) !important; /* Color con transparencia*/
+  color: var(--color-text) !important;
+}
+.btn-add:hover {
+  background-color: #A3C4F3AA !important;
+  color: var(--color-text-secondary) !important;
+  border: var(--color-primary-dark);
+}
+.btn-add:active {
+  background-color: var(--color-primary-dark) !important;
+  color: var(--color-text-invert) !important;
+  transition: background-color 0.3s ease;
+}
+
+.btn-danger {
+  background-color: var(--color-accent);
+  color: var(--color-text);
+}
+.btn-danger:hover {
+  background-color: #F4A896AA;
+  color: var(--color-text-secondary);
+  border: var(--color-accent);
+}
+
+.btn-search {
+    background: linear-gradient(135deg, var(--color-secondary), #2ad085);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 6px rgba(42, 208, 133, 0.2);
+}
+.btn-search:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(8, 63, 38, 0.728);
+    background: linear-gradient(135deg, #2ad085, var(--color-secondary));
+}
+.btn-search:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(42, 208, 133, 0.2);
+}
+
+.btn-clean {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+.btn-clean:hover {
+  background-color: #e09d9daa;
+  color: var(--color-text-secondary);
+  border: var(--color-secondary);
+}
+.btn-clean:active {
+  background-color: #e94343 !important;
+  color: var(--color-text-invert) !important;
+  transition: background-color 0.3s ease;
+}
+
+/* ================= VENTANAS PERSONALIZADOS ================== */
+/* Clases específicas para cada modo */
+.modal-header-edit {
+    background-color: #ffc107 !important;
+    color: #212529 !important;
+    border-bottom: 2px solid #e0a800;
+}
+
+.modal-header-create {
+    background-color: var(--color-primary) !important; 
+    color: var(--color-text) !important;
+    border-bottom: 2px solid #218838;
+}
+
+.modal-header.bg-success {
+    background-color: #3ed792 !important; /*Color de movimientos*/
+    color: var(--color-text-invert) !important;
+}
+
+/* ================== AUTOCOMPLETE CUSTOMIZATION =============== */
+.autocomplete-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 0 0 6px 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    z-index: 1000;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.suggestion-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f8f9fa;
+    transition: background-color 0.2s ease;
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.suggestion-hover, .suggestion-item:hover {
+    background-color: var(--color-primary);
+    color: white;
+}
+
+/* Ajustar el input cuando hay sugerencias */
+.position-relative:has(.autocomplete-suggestions) .form-control {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+/* ============== SwetAlert2 Customization =============== */
+.swal-btn-ok {
+    background-color: var(--color-primary);
+    color: var(--color-text);
+    border: none;
+    border-radius: 8px;
+    padding: 10px 25px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+.swal-btn-ok:hover {
+    background-color: var(--color-bg-rgb);
+    transform: scale(1.05);
+}
+
+
+.validation-message {
+    color: #e50000;
+}
+
+.blazor-error-boundary {
+    background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIG92ZXJmbG93PSJoaWRkZW4iPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjIzNSIgeT0iNTEiIHdpZHRoPSI1NiIgaGVpZ2h0PSI0OSIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMCkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0yMzUgLTUxKSI+PHBhdGggZD0iTTI2My41MDYgNTFDMjY0LjcxNyA1MSAyNjUuODEzIDUxLjQ4MzcgMjY2LjYwNiA1Mi4yNjU4TDI2Ny4wNTIgNTIuNzk4NyAyNjcuNTM5IDUzLjYyODMgMjkwLjE4NSA5Mi4xODMxIDI5MC41NDUgOTIuNzk1IDI5MC42NTYgOTIuOTk2QzI5MC44NzcgOTMuNTEzIDI5MSA5NC4wODE1IDI5MSA5NC42NzgyIDI5MSA5Ny4wNjUxIDI4OS4wMzggOTkgMjg2LjYxNyA5OUwyNDAuMzgzIDk5QzIzNy45NjMgOTkgMjM2IDk3LjA2NTEgMjM2IDk0LjY3ODIgMjM2IDk0LjM3OTkgMjM2LjAzMSA5NC4wODg2IDIzNi4wODkgOTMuODA3MkwyMzYuMzM4IDkzLjAxNjIgMjM2Ljg1OCA5Mi4xMzE0IDI1OS40NzMgNTMuNjI5NCAyNTkuOTYxIDUyLjc5ODUgMjYwLjQwNyA1Mi4yNjU4QzI2MS4yIDUxLjQ4MzcgMjYyLjI5NiA1MSAyNjMuNTA2IDUxWk0yNjMuNTg2IDY2LjAxODNDMjYwLjczNyA2Ni4wMTgzIDI1OS4zMTMgNjcuMTI0NSAyNTkuMzEzIDY5LjMzNyAyNTkuMzEzIDY5LjYxMDIgMjU5LjMzMiA2OS44NjA4IDI1OS4zNzEgNzAuMDg4N0wyNjEuNzk1IDg0LjAxNjEgMjY1LjM4IDg0LjAxNjEgMjY3LjgyMSA2OS43NDc1QzI2Ny44NiA2OS43MzA5IDI2Ny44NzkgNjkuNTg3NyAyNjcuODc5IDY5LjMxNzkgMjY3Ljg3OSA2Ny4xMTgyIDI2Ni40NDggNjYuMDE4MyAyNjMuNTg2IDY2LjAxODNaTTI2My41NzYgODYuMDU0N0MyNjEuMDQ5IDg2LjA1NDcgMjU5Ljc4NiA4Ny4zMDA1IDI1OS43ODYgODkuNzkyMSAyNTkuNzg2IDkyLjI4MzcgMjYxLjA0OSA5My41Mjk1IDI2My41NzYgOTMuNTI5NSAyNjYuMTE2IDkzLjUyOTUgMjY3LjM4NyA5Mi4yODM3IDI2Ny4zODcgODkuNzkyMSAyNjcuMzg3IDg3LjMwMDUgMjY2LjExNiA4Ni4wNTQ3IDI2My41NzYgODYuMDU0N1oiIGZpbGw9IiNGRkU1MDAiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, #b32121;
+    padding: 1rem 1rem 1rem 3.7rem;
+    color: white;
+}
+
+    .blazor-error-boundary::after {
+        content: "An error has occurred."
+    }
+
+.darker-border-checkbox.form-check-input {
+    border-color: #929292;
+}
+
+.form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
+    color: var(--bs-secondary-color);
+    text-align: end;
+}
+
+.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
+    text-align: start;
+}

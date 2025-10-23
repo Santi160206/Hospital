@@ -1,24 +1,62 @@
-<div class="top-row ps-3 navbar navbar-dark">
+@using Microsoft.AspNetCore.Components.Routing
+
+<!-- HEADER -->
+<div class="top-row ps-3 navbar-custom">
     <div class="container-fluid">
-        <NavLink class="navbar-brand" href="" Match="NavLinkMatch.All">💊 Sistema de Inventario</NavLink>
+        <a class="navbar-brand d-flex align-items-center" href="">
+            <img src="Logo - copia.png" alt="Hospital" class="me-2 logo-hospital" />
+            <span class="navbar-brand">Hospital</span>
+        </a>
+
+        <button class="navbar-toggler d-md-none" @onclick="ToggleNavMenu" aria-expanded="@(!colapsado)">
+            <span class="navbar-toggler-icon"></span>
+        </button>
     </div>
 </div>
 
 <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+<div class="@NavMenuCssClass nav-scrollable sidebar-custom" @onclick="ToggleNavMenu">
     <nav class="nav flex-column">
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+                <i class="bi bi-hospital"></i>
+                Home
             </NavLink>
         </div>
-        
+
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="medicamentos">
-                <span class="bi bi-capsule-nav-menu" aria-hidden="true"></span> Medicamentos
+            <NavLink class="nav-link" href="MedicamentosPage">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-journal-medical"></i>
+                    <span class="ms-2">Medicamentos</span>
+                </div>
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="VentasPage">
+                <i class="bi bi-clipboard2-pulse"></i>
+                Ventas
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="ProveedoresPage">
+                <i class="bi bi-building-add"></i>
+                Proveedores
             </NavLink>
         </div>
     </nav>
 </div>
 
+@code {
+    private bool colapsado = true;
+    
+    private string NavMenuCssClass => colapsado ? "collapse" : "show";
+    
+    private void ToggleNavMenu()
+    {
+        colapsado = !colapsado;
+    }
+}

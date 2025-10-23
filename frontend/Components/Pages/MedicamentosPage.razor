@@ -1,9 +1,12 @@
-@page "/medicamentos"
+@page "/MedicamentosPage"
 @using FrontEndBlazor.Models
 @using FrontEndBlazor.Services
+@using System.Threading.Tasks
 @inject IMedicamentoService MedicamentoService
 @inject IAuthService AuthService
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+
 
 <PageTitle>Medicamentos</PageTitle>
 
@@ -11,11 +14,11 @@
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h2>💊 Inventario de Medicamentos</h2>
+            <h2 class="title-style">💊  Inventario de Medicamentos</h2>
             <p class="text-muted">Gestión completa del catálogo de medicamentos</p>
         </div>
         <div>
-            <button class="btn btn-primary" @onclick="OpenCreateModal">
+            <button class="btn btn-add" @onclick="OpenCreateModal">
                 ➕ Agregar Medicamento
             </button>
             <button class="btn btn-outline-secondary ms-2" @onclick="LoadMedicamentos">
@@ -27,25 +30,48 @@
     <!-- Filtros -->
     <div class="card mb-4">
         <div class="card-body">
-            <div class="row g-3 align-items-end">
+            <div class="d-flex flex-wrap align-items-center gap-3">
                 <!-- Barra de búsqueda única con select de tipo de filtro -->
-                <div class="col-md-5">
+                <div class="d-flex flex-column" style="min-width: 340px;">
                     <label class="form-label">Buscar medicamento</label>
-                    <div class="input-group">
-                        <input type="text" class="form-control" @bind="textoBusqueda" @bind:event="oninput" 
-                               placeholder="@GetPlaceholderTexto()" />
-                        <select class="form-select" style="max-width: 180px;" @bind="tipoFiltro">
+                    <div class="position-relative">
+                        <input type="text"
+                            id="busquedaInput"
+                            class="form-control"
+                            @bind="textoBusquedaAuto"
+                            @bind:event="oninput"
+                            placeholder="@GetPlaceholderTexto()"
+                            @onkeydown="DetectarTecla" />
+
+                        <select class="form-select"
+                                style="max-width: 180px; position: absolute; right: -190px; top: 0;"
+                                @bind="tipoFiltro">
                             <option value="nombre">📝 Nombre</option>
                             <option value="presentacion">💊 Presentación</option>
                             <option value="fabricante">🏭 Fabricante</option>
                             <option value="lote">🔖 Lote</option>
                         </select>
+
+                        @if (sugerencias.Any() && mostrarSugerencias)
+                        {
+                            <div class="autocomplete-suggestions">
+                                @foreach (var s in sugerencias)
+                                {
+                                    <div class="suggestion-item @(sugerencias.IndexOf(s) == indiceSeleccionado ? "suggestion-hover" : "")"
+                                        @onclick="() => SeleccionarSugerencia(s)">
+                                        @s
+                                    </div>
+                                }
+                            </div>
+                        }
                     </div>
+
                     <small class="text-muted">Filtrando por: @GetTipoFiltroLabel()</small>
+
                 </div>
 
                 <!-- Estado -->
-                <div class="col-md-2">
+                <div class="d-flex flex-column" style="min-width: 160px;">
                     <label class="form-label">Estado</label>
                     <select class="form-select" @bind="filtroEstado" @bind:event="oninput">
                         <option value="">Todos (Admin)</option>
@@ -55,7 +81,7 @@
                 </div>
 
                 <!-- Stock Bajo -->
-                <div class="col-md-2">
+                <div class="d-flex flex-column justify-content-center" style="min-width: 130px;">
                     <label class="form-label">Opciones</label>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" @bind="filtroStockBajo" id="stockBajo">
@@ -67,14 +93,14 @@
 
                 <!-- Botón Buscar -->
                 <div class="col-md-2">
-                    <button class="btn btn-primary w-100" @onclick="AplicarFiltros">
+                    <button class="btn btn-search w-100" @onclick="AplicarFiltros">
                         🔍 Buscar
                     </button>
                 </div>
 
                 <!-- Botón Limpiar -->
                 <div class="col-md-1">
-                    <button class="btn btn-outline-secondary w-100" @onclick="LimpiarFiltros" title="Limpiar filtros">
+                    <button class="btn btn-clean w-100" @onclick="LimpiarFiltros" title="Limpiar filtros">
                         🗑️
                     </button>
                 </div>
@@ -200,15 +226,15 @@
             </div>
         </div>
     }
-</div>
 
+</div>
 <!-- Modal Crear/Editar -->
 @if (showFormModal)
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header">
+                <div class="modal-header @(isEditMode ? "modal-header-edit" : "modal-header-create")">
                     <h5 class="modal-title">@(isEditMode ? "✏️ Editar Medicamento" : "➕ Crear Medicamento")</h5>
                     <button type="button" class="btn-close" @onclick="CloseFormModal"></button>
                 </div>
@@ -329,7 +355,7 @@
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
         <div class="modal-dialog">
             <div class="modal-content">
-                <div class="modal-header">
+                <div class="modal-header bg-success">
                     <h5 class="modal-title">📦 Registrar Movimiento</h5>
                     <button type="button" class="btn-close" @onclick="CloseMovimientoModal"></button>
                 </div>
@@ -537,6 +563,7 @@
     private bool loading = false;
     private string successMessage = string.Empty;
     private string errorMessage = string.Empty;
+    private bool hasError = false;
 
     // Filtros
     private string textoBusqueda = string.Empty;
@@ -557,10 +584,10 @@
         {
             // CRÍTICO: Asegurar que el token esté cargado ANTES de hacer peticiones
             await AuthService.LoadTokenAsync();
-            
+
             // Pequeña espera para asegurar que el token esté disponible
             await Task.Delay(100);
-            
+
             // Verificar autenticación
             var isAuth = await AuthService.IsAuthenticatedAsync();
             if (!isAuth)
@@ -568,13 +595,20 @@
                 NavigationManager.NavigateTo("/login", forceLoad: false);
                 return;
             }
-            
             // Ahora sí cargar medicamentos con token disponible
             await LoadMedicamentos();
         }
         catch (Exception ex)
         {
+            hasError = true;
             errorMessage = $"Error al inicializar: {ex.Message}";
+        }
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && hasError)
+        {
+            await MostrarAlertaError("Error al inicializar la página. Por favor, recargue."+$"\nDetalles: {errorMessage}");
         }
     }
 
@@ -584,21 +618,21 @@
         {
             loading = true;
             errorMessage = string.Empty;
-            
+
             // Debug: Verificar autenticación antes de llamar API
             var isAuthenticated = await AuthService.IsAuthenticatedAsync();
             if (!isAuthenticated)
             {
-                errorMessage = "No hay sesión activa. Por favor, inicie sesión nuevamente.";
+                await MostrarAlertaError("Sesión expirada. Por favor, inicie sesión nuevamente.");
                 NavigationManager.NavigateTo("/login", forceLoad: false);
                 return;
             }
-            
+
             medicamentos = await MedicamentoService.GetAllAsync();
         }
         catch (Exception ex)
         {
-            errorMessage = $"Error al cargar medicamentos: {ex.Message}";
+            await MostrarAlertaError($"Error al cargar medicamentos: {ex.Message}");
         }
         finally
         {
@@ -612,12 +646,11 @@
         {
             loading = true;
             errorMessage = string.Empty;
-            
             // Aplicar filtro según tipo seleccionado
             string? nombre = null;
             string? fabricante = null;
             string? lote = null;
-            
+
             if (!string.IsNullOrWhiteSpace(textoBusqueda))
             {
                 switch (tipoFiltro)
@@ -636,9 +669,9 @@
                         break;
                 }
             }
-            
+
             var estado = string.IsNullOrWhiteSpace(filtroEstado) ? null : filtroEstado;
-            
+
             medicamentos = await MedicamentoService.GetAllAsync(
                 nombre: nombre,
                 fabricante: fabricante,
@@ -646,15 +679,53 @@
                 estado: estado,
                 stockBajo: filtroStockBajo ? true : null
             );
+            
         }
         catch (Exception ex)
         {
-            errorMessage = $"Error al filtrar: {ex.Message}";
+            await MostrarAlertaError($"Error al aplicar filtros: {ex.Message}");
         }
         finally
         {
             loading = false;
         }
+    }
+    private async Task MostrarAlertaExito(string mensaje)
+    {
+        await JS.InvokeVoidAsync("Swal.fire", new {
+            icon = "success",
+            title = "Éxito",
+            text = mensaje,
+            showConfirmButton = false,
+            timer = 2000
+        });
+    }
+
+    private async Task MostrarAlertaError(string mensaje)
+    {
+        await JS.InvokeVoidAsync("Swal.fire", new {
+            icon = "error",
+            title = "Error",
+            text = mensaje,
+            confirmButtonText = "Aceptar"
+        });
+    }
+
+    private async Task<bool> MostrarConfirmacion(string mensaje)
+    {
+        var result = await JS.InvokeAsync<object>("Swal.fire", new {
+            title = "¿Estás seguro?",
+            text = mensaje,
+            icon = "warning",
+            showCancelButton = true,
+            confirmButtonColor = "#3085d6",
+            cancelButtonColor = "#d33",
+            confirmButtonText = "Sí, confirmar",
+            cancelButtonText = "Cancelar"
+        });
+
+        // Convertir el resultado
+        return result?.ToString()?.Contains("isConfirmed") ?? false;
     }
 
     private void CambiarTipoFiltro(string nuevoTipo)
@@ -687,7 +758,7 @@
         };
     }
 
-    private void LimpiarFiltros()
+    private async Task LimpiarFiltros()
     {
         textoBusqueda = string.Empty;
         tipoFiltro = "nombre";
@@ -697,12 +768,109 @@
     }
 
     // Modal Crear
-    private void OpenCreateModal()
+    private async Task OpenCreateModal()
     {
         isEditMode = false;
         formModel = new MedicamentoFormModel();
         selectedMedicamento = null;
         showFormModal = true;
+    }
+
+    private List<string> sugerencias = new();
+    private bool mostrarSugerencias = false;
+    private int indiceSeleccionado = -1;
+    private CancellationTokenSource cts = new();
+
+    private string textoBusquedaAuto
+    {
+        get => textoBusqueda;
+        set
+        {
+            if (textoBusqueda == value) return;
+            textoBusqueda = value;
+            indiceSeleccionado = -1;
+            // Llamada no bloqueante desde el setter
+            _ = BuscarSugerenciasAsync();
+        }
+    }
+
+    // Nuevo método sin parámetros que usa textoBusqueda
+    private async Task BuscarSugerenciasAsync()
+    {
+        // cancelar búsquedas previas
+        cts.Cancel();
+        cts = new CancellationTokenSource();
+
+        if (string.IsNullOrWhiteSpace(textoBusqueda) || textoBusqueda.Length < 2)
+        {
+            sugerencias.Clear();
+            mostrarSugerencias = false;
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(200, cts.Token);
+
+            var resultado = await MedicamentoService.GetAllAsync(
+                nombre: tipoFiltro == "nombre" ? textoBusqueda : null,
+                fabricante: tipoFiltro == "fabricante" ? textoBusqueda : null,
+                lote: tipoFiltro == "lote" ? textoBusqueda : null,
+                estado: filtroEstado == "" ? null : filtroEstado
+            );
+
+            sugerencias = resultado
+                .Select(m => tipoFiltro switch
+                {
+                    "nombre" => m.Nombre,
+                    "presentacion" => m.Presentacion,
+                    "fabricante" => m.Fabricante,
+                    "lote" => m.Lote,
+                    _ => m.Nombre
+                })
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct()
+                .Take(8)
+                .ToList();
+
+            mostrarSugerencias = sugerencias.Any();
+            StateHasChanged();
+        }
+        catch (TaskCanceledException) { /* ignorar */ }
+        catch (Exception ex)
+        {
+            await MostrarAlertaError($"Error al cargar sugerencias: {ex.Message}");
+        }
+    }
+    // Cuando el usuario selecciona una sugerencia (clic o TAB)
+    private async Task SeleccionarSugerencia(string valor)
+    {
+        textoBusqueda = valor;
+        mostrarSugerencias = false;
+        await AplicarFiltros();
+    }
+    // Detecta teclas: flechas y tabulador
+    private async Task DetectarTecla(KeyboardEventArgs e)
+    {
+        if (!mostrarSugerencias) return;
+
+        if (e.Key == "ArrowDown")
+        {
+            indiceSeleccionado = (indiceSeleccionado + 1) % sugerencias.Count;
+        }
+        else if (e.Key == "ArrowUp")
+        {
+            indiceSeleccionado = (indiceSeleccionado - 1 + sugerencias.Count) % sugerencias.Count;
+        }
+        else if (e.Key == "Tab" || e.Key == "Enter")
+        {
+            if (indiceSeleccionado >= 0 && indiceSeleccionado < sugerencias.Count)
+            {
+                await SeleccionarSugerencia(sugerencias[indiceSeleccionado]);
+            }
+            mostrarSugerencias = false;
+        }
     }
 
     // Modal Editar
@@ -755,7 +923,7 @@
                 };
 
                 await MedicamentoService.UpdateAsync(selectedMedicamento.Id, updateDto);
-                successMessage = "Medicamento actualizado exitosamente";
+                await MostrarAlertaExito("Medicamento actualizado exitosamente");
             }
             else
             {
@@ -773,7 +941,7 @@
                 };
 
                 await MedicamentoService.CreateAsync(createDto);
-                successMessage = "Medicamento creado exitosamente";
+                await MostrarAlertaExito("Medicamento creado exitosamente");
             }
 
             CloseFormModal();
@@ -785,7 +953,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"Error: {ex.Message}";
+            await MostrarAlertaError($"Error al guardar medicamento: {ex.Message}");
         }
         finally
         {
@@ -822,7 +990,7 @@
 
             if (result.Deleted)
             {
-                successMessage = "Medicamento eliminado exitosamente";
+                await MostrarAlertaExito("Medicamento eliminado exitosamente");
             }
             else if (result.Dependencias > 0)
             {
@@ -838,7 +1006,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"Error al eliminar: {ex.Message}";
+            await MostrarAlertaError($"Error al eliminar medicamento: {ex.Message}");
         }
         finally
         {
@@ -882,7 +1050,7 @@
             };
 
             await MedicamentoService.CreateMovimientoAsync(selectedMedicamento.Id, dto);
-            successMessage = $"Movimiento de {movimientoModel.Tipo} registrado exitosamente";
+            await MostrarAlertaExito("Movimiento registrado exitosamente");
 
             CloseMovimientoModal();
             await LoadMedicamentos();
@@ -893,7 +1061,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"Error al registrar movimiento: {ex.Message}";
+            await MostrarAlertaError($"Error al registrar movimiento: {ex.Message}");
         }
         finally
         {
@@ -932,7 +1100,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"Error al cargar auditoría: {ex.Message}";
+            await MostrarAlertaError($"Error al cargar auditoría: {ex.Message}");
         }
         finally
         {
@@ -948,7 +1116,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"Error al cargar movimientos: {ex.Message}";
+            await MostrarAlertaError($"Error al cargar movimientos: {ex.Message}");
         }
     }
 
@@ -967,12 +1135,12 @@
             
             if (result.Reactivated)
             {
-                successMessage = $"Medicamento '{med.Nombre}' reactivado exitosamente";
+                await MostrarAlertaExito("Medicamento reactivado exitosamente");
                 await LoadMedicamentos();
             }
             else
             {
-                errorMessage = "No se pudo reactivar el medicamento";
+                await MostrarAlertaError("No se pudo reactivar el medicamento");
             }
         }
         catch (InvalidOperationException ex)
@@ -981,7 +1149,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"Error al reactivar: {ex.Message}";
+            await MostrarAlertaError($"Error al reactivar medicamento: {ex.Message}");
         }
     }
 

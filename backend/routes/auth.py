@@ -25,13 +25,13 @@ async def authenticate_user(username: str, password: str, db: Session) -> models
             detail="Usuario o contraseña inválidos",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if not verify_password(password, user.hashed_password):
+    if not verify_password(password, str(user.hashed_password)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario o contraseña inválidos",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if not user.is_active:
+    if not bool(user.is_active):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Usuario inactivo"
@@ -65,10 +65,10 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     user = db.query(models.User).filter(models.User.username == form_data.username).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Usuario o contraseña inválidos')
-    if not verify_password(form_data.password, user.hashed_password):
+    if not verify_password(form_data.password, str(user.hashed_password)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Usuario o contraseña inválidos')
 
-    if not user.is_active:
+    if user.is_active is not True:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Usuario inactivo')
 
     token_data = {"sub": str(user.id), "username": user.username, "role": user.role.value}

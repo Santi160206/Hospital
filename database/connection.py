@@ -7,7 +7,7 @@ from urllib.parse import quote_plus
 load_dotenv()
 
 # Connection details for SQL Server with Windows Authentication
-SERVER = os.getenv('DB_SERVER', 'SANTIAGO\\SQLEXPRESS')
+SERVER = os.getenv('DB_SERVER', 'DESKTOP-UIQHK0S\\SQLEXPRESS')
 DATABASE = os.getenv('DB_NAME', 'ProyectoInvMedicamentos')
 
 # Build ODBC connection string and quote it for SQLAlchemy + pyodbc

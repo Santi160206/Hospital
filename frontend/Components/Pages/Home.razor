@@ -20,6 +20,7 @@
     {
         await AuthService.LogoutAsync();
     }
+
 }
 
 @if (isLoading)
@@ -50,6 +51,7 @@ else if (!isAuthenticated)
                             <NavLink href="login" class="btn btn-primary btn-lg px-4">
                                 Iniciar Sesión
                             </NavLink>
+
                             <NavLink href="register" class="btn btn-outline-primary btn-lg px-4">
                                 Crear Cuenta
                             </NavLink>
