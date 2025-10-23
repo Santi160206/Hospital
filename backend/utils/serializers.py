@@ -13,7 +13,7 @@ def _as_str(val: Any) -> Any:
     except Exception:
         pass
 
-    # datetimes -> isoformat
+    
     if isinstance(val, datetime):
         return val.isoformat()
     if isinstance(val, date):
@@ -33,7 +33,7 @@ def medicamento_to_dict(m) -> Dict[str, Any]:
         'fecha_vencimiento': _as_str(getattr(m, 'fecha_vencimiento', None)),
         'stock': getattr(m, 'stock', None),
         'minimo_stock': getattr(m, 'minimo_stock', None),
-    # precio stored as Decimal in DB; serialize as string to avoid float precision loss
+   
     'precio': str(getattr(m, 'precio', None)) if getattr(m, 'precio', None) is not None else None,
         'estado': getattr(m, 'estado', None).name if getattr(m, 'estado', None) is not None else None,
         'is_deleted': getattr(m, 'is_deleted', False),

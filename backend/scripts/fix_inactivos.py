@@ -15,7 +15,7 @@ Esto permite que los admins puedan verlos y reactivarlos.
 import sys
 from pathlib import Path
 
-# Add backend to path
+
 backend_path = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_path))
 
@@ -28,7 +28,7 @@ def fix_inactivos():
     db = SessionLocal()
     
     try:
-        # Buscar medicamentos con estado=INACTIVO y is_deleted=True
+        
         medicamentos = db.query(models.Medicamento).filter(
             and_(
                 models.Medicamento.estado == models.EstadoEnum.INACTIVO,
@@ -54,7 +54,7 @@ def fix_inactivos():
             med.is_deleted = False
             db.add(med)
         
-        # Commit de todos los cambios
+     
         db.commit()
         
         print()

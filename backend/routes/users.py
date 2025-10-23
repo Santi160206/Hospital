@@ -18,7 +18,7 @@ def get_user_service(db=Depends(get_db)) -> UserService:
 router = APIRouter()
 
 
-# Public: create user (signup) - no auth required
+
 @router.post('/', response_model=UserOut)
 def create_user(payload: UserCreate, db: Session = Depends(get_db), service: UserService = Depends(get_user_service)):
     existing = db.query(models.User).filter((models.User.username == payload.username) | (models.User.email == payload.email)).first()
@@ -26,11 +26,10 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), service: Use
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Usuario o email ya existen')
 
     payload_dict = payload.model_dump()
-    # remove raw password and replace with hashed_password
+   
     raw_pw = payload_dict.pop('password', None)
     payload_dict['hashed_password'] = hash_password(raw_pw) if raw_pw else None
-    # convert role to Enum instance expected by the model
-    # Prevent public creation of admin role
+    
     if payload_dict.get('role') == 'admin':
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='No está permitido crear usuarios con rol admin a través de este endpoint')
     payload_dict['role'] = models.UserRoleEnum(payload.role)
@@ -39,10 +38,10 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), service: Use
 
 
 
-# Admin-only: create admin user
+
 @router.post('/create_admin', response_model=UserOut)
 def create_admin(payload: UserCreate, db: Session = Depends(get_db), current_user: dict = Depends(require_admin), service: UserService = Depends(get_user_service)):
-    # only admins may create other admins via this protected endpoint
+   
     existing = db.query(models.User).filter((models.User.username == payload.username) | (models.User.email == payload.email)).first()
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Usuario o email ya existen')
@@ -50,13 +49,13 @@ def create_admin(payload: UserCreate, db: Session = Depends(get_db), current_use
     payload_dict = payload.model_dump()
     raw_pw = payload_dict.pop('password', None)
     payload_dict['hashed_password'] = hash_password(raw_pw) if raw_pw else None
-    # force role to admin
+  
     payload_dict['role'] = models.UserRoleEnum('admin')
     u = service.create_user(payload_dict)
     return u
 
 
-# Protected: get own profile
+
 @router.get('/me', response_model=UserOut)
 def get_me(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db), service: UserService = Depends(get_user_service)):
     user = service.get_user(current_user.get('sub'))
@@ -65,7 +64,7 @@ def get_me(current_user: dict = Depends(get_current_user), db: Session = Depends
     return user
 
 
-# Admin: list users
+
 @router.get('/', response_model=List[UserOut])
 def list_users(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user), service: UserService = Depends(get_user_service)):
     if current_user.get('role') != 'admin':
@@ -74,7 +73,7 @@ def list_users(db: Session = Depends(get_db), current_user: dict = Depends(get_c
     return users
 
 
-# Get user by id (admin or owner)
+
 @router.get('/{user_id}', response_model=UserOut)
 def get_user(user_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user), service: UserService = Depends(get_user_service)):
     user = service.get_user(user_id)
@@ -85,7 +84,7 @@ def get_user(user_id: str, db: Session = Depends(get_db), current_user: dict = D
     return user
 
 
-# Update user (owner or admin). Non-admin cannot change role.
+
 @router.put('/{user_id}', response_model=UserOut)
 def update_user(user_id: str, payload: UserUpdate, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user), service: UserService = Depends(get_user_service)):
     user = service.get_user(user_id)
@@ -97,7 +96,7 @@ def update_user(user_id: str, payload: UserUpdate, db: Session = Depends(get_db)
     if not (is_admin or is_owner):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='No tiene permisos')
 
-    # non-admin cannot change role
+ 
     if payload.role and not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='No puede cambiar el rol')
 
@@ -114,7 +113,7 @@ def update_user(user_id: str, payload: UserUpdate, db: Session = Depends(get_db)
     return user
 
 
-# Delete user (admin only)
+
 @router.delete('/{user_id}')
 def delete_user(user_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user), service: UserService = Depends(get_user_service)) -> MessageOut:
     if current_user.get('role') != 'admin':

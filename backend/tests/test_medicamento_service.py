@@ -10,7 +10,7 @@ import datetime
 
 @pytest.fixture()
 def session():
-    # in-memory sqlite
+  
     engine = create_engine('sqlite:///:memory:')
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)
@@ -40,7 +40,7 @@ def test_update_with_change_generates_audit(session):
     svc = MedicamentoService(session)
     res = svc.update_medicamento(str(m.id), {'precio': 9.99}, user_id='tester')
     assert res['updated'] is True
-    # check audit log
+
     al = session.query(models.AuditLog).filter(models.AuditLog.entidad_id == m.id).first()
     assert al is not None
     assert al.usuario_id == 'tester'

@@ -28,7 +28,7 @@ def test_registrar_salida_valida(session):
     res = svc.registrar_movimiento(str(m.id), 'SALIDA', 20, usuario_id='user1')
     assert res.get('ok') is True
     assert res.get('stock') == 30
-    # movement created
+  
     mv = res.get('movimiento')
     assert mv.cantidad == 20
     assert mv.tipo.name == 'SALIDA'

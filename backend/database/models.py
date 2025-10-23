@@ -25,8 +25,7 @@ class GUID(TypeDecorator):
     def process_bind_param(self, value, dialect):
         if value is None:
             return value
-        # accept UUID or str
-        # always pass a string representation to the DBAPI to keep types consistent
+      
         if isinstance(value, bytes):
             try:
                 value = value.decode()
@@ -37,7 +36,7 @@ class GUID(TypeDecorator):
         return value
 
     def process_result_value(self, value, dialect):
-        # normalize DB-returned GUIDs to string so SQLAlchemy can match parameter sentinels
+      
         if value is None:
             return None
         try:
@@ -74,7 +73,8 @@ class Medicamento(Base):
     updated_at = Column(DateTime, onupdate=func.now(), server_default=func.now())
     deleted_at = Column(DateTime, nullable=True)
     deleted_by = Column(String(100), nullable=True)
-    # make search_key unique to enforce DB-level uniqueness across restarts/processes
+    
+    # Filtrado y búsqueda
     search_key = Column(String(400), nullable=False, unique=True)
 
     movimientos = relationship('Movimiento', back_populates='medicamento')

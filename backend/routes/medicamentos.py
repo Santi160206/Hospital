@@ -24,49 +24,45 @@ def get_medicamento_service(db: Session = Depends(get_db)) -> MedicamentoService
     return MedicamentoService(db)
 
 
-# let FastAPI/Pydantic serialize ORM objects using model_config.from_attributes
-
-
 @router.post("/", response_model=MedicamentoOut)
 def crear_medicamento(payload: MedicamentoCreate, response: Response, service: MedicamentoService = Depends(get_medicamento_service), db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     # validar duplicados via repository (case-insensitive, sin acentos)
     # HU-1.01: Validar solo nombre + presentación + fabricante (NO incluir lote)
     search_key = f"{normalize_text(payload.nombre)}|{normalize_text(payload.presentacion)}|{normalize_text(payload.fabricante)}"
     repo = MedicamentoRepository(db)
-    # first check active, non-deleted
+
     existing_active = repo.find_by_search_key(search_key)
     if existing_active:
-        # active duplicate: block creation
+       
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"error": "Medicamento duplicado", "existing_id": str(existing_active.id)})
     # if there's a duplicate but is inactive or deleted, surface a different message
     existing_any = repo.find_by_search_key(search_key, include_deleted=True, include_inactive=True)
     if existing_any:
-        # found a duplicate that is inactive or deleted
+       
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"error": "Medicamento duplicado (inactivo)", "existing_id": str(existing_any.id), "message": "Existe un medicamento con los mismos datos pero inactivo. ¿Desea reactivarlo?"})
 
-    # business rule: fecha_vencimiento must not be in the past
+
     from datetime import date, timedelta
     if payload.fecha_vencimiento < date.today():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Fecha inválida: la fecha de vencimiento no puede ser anterior a hoy.')
-    # if vencimiento within 30 days, add warning header
+    
     if payload.fecha_vencimiento <= date.today() + timedelta(days=30):
         response.headers['X-Warning'] = 'Este medicamento está próximo a vencer, ¿Continuar?'
 
-    # service injected via Depends
+   
     payload_dict = payload.model_dump()
     payload_dict['search_key'] = search_key
     try:
         m = service.create_medicamento(payload_dict, user.get('sub') if user else None)
     except IntegrityError:
-        # race: another process inserted same search_key between our check and commit
-        # re-query to get the existing record and map to 409 with friendly message
+        
         existing = repo.find_by_search_key(search_key)
         if existing:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"error": "Medicamento duplicado", "existing_id": str(existing.id)})
-        # otherwise re-raise generic
+        
         raise
     response.status_code = status.HTTP_201_CREATED
-    # Pydantic will read attributes from the ORM object (MedicamentoOut.model_config['from_attributes']=True)
+   
     return m
 
 
@@ -79,15 +75,13 @@ class SearchFilterEnum(str, Enum):
 
 @router.get('/search', response_model=List[MedicamentoShortOut])
 def search_med(query: Optional[str] = None, values: Optional[str] = None, filter: SearchFilterEnum = SearchFilterEnum.nombre, limit: int = 8, service: MedicamentoService = Depends(get_medicamento_service), user: dict = Depends(get_current_user)):
-    # accept either 'query' or legacy/other-client 'values' parameter (some Swagger UI variants send 'values')
+   
     qraw = query or values
     if not qraw:
-        # no query provided -> return empty suggestions to avoid validation errors in UIs
+        
         return []
     normalized = normalize_text(qraw)
-    # filter is an Enum (exposed in OpenAPI). Use it directly but keep
-    # `values` fallback for legacy clients that send the query text under a
-    # different name.
+   
     if filter == SearchFilterEnum.principio_activo:
         results = service.search_by_principio_activo(normalized, limit)
     elif filter == SearchFilterEnum.lote:
@@ -140,10 +134,10 @@ def listar_medicamentos(
     """
     from auth.security import is_admin
     
-    # Base query: nunca mostrar eliminados (is_deleted=True)
+ 
     q = db.query(models.Medicamento).filter(models.Medicamento.is_deleted == False)
     
-    # Control de acceso por rol
+   
     user_is_admin = is_admin(user)
     
     # Lógica de filtrado de estado
@@ -174,7 +168,7 @@ def listar_medicamentos(
     
     # Aplicar filtros opcionales
     if nombre:
-        # HU-1.03: Búsqueda case-insensitive y parcial
+       
         like = f"%{nombre}%"
         q = q.filter(
             (models.Medicamento.nombre.ilike(like)) | 
@@ -209,10 +203,6 @@ def listar_medicamentos(
     return q.limit(limit).all()
 
 
-# Note: the filtered `listar_medicamentos` endpoint above is the canonical listing route.
-# The simpler duplicate route was removed to avoid FastAPI route conflicts (duplicate path definitions).
-
-
 @router.get("/{med_id}", response_model=MedicamentoOut)
 def detalle_medicamento(med_id: str, service: MedicamentoService = Depends(get_medicamento_service), db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     m = db.query(models.Medicamento).filter(models.Medicamento.id == med_id).first()
@@ -228,9 +218,9 @@ def actualizar_medicamento(med_id: str, payload: MedicamentoUpdate, response: Re
         raise HTTPException(status_code=404, detail="Medicamento no encontrado")
 
     # validar y preparar cambios
-    # Before applying changes, compute potential new search_key and check duplicates
+    
     data = payload.model_dump(exclude_unset=True)
-    # business rule: if fecha_vencimiento provided, validate
+   
     from datetime import date, timedelta
     if 'fecha_vencimiento' in data:
         fv = data.get('fecha_vencimiento')
@@ -248,8 +238,7 @@ def actualizar_medicamento(med_id: str, payload: MedicamentoUpdate, response: Re
     if dup:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"error":"Medicamento duplicado con los nuevos valores", "existing_id": str(dup.id)})
 
-    # use injected service
-    # ensure search_key stored in DB reflects the new values
+   
     data['search_key'] = new_search_key
     res = service.update_medicamento(med_id, data, user.get('sub') if user else None)
     if not res:
@@ -289,7 +278,7 @@ def reactivar_medicamento(med_id: str, service: MedicamentoService = Depends(get
         if res.get('reason') == 'expired':
             raise HTTPException(status_code=400, detail='No es posible reactivar: la fecha de vencimiento ya expiró.')
         raise HTTPException(status_code=409, detail='No se pudo reactivar el medicamento')
-    # return medicamento object (Pydantic will serialize via response_model if desired)
+ 
     med = res.get('medicamento')
     return ReactivateOut(reactivated=True, medicamento=med)
 

@@ -53,10 +53,10 @@ class MedicamentoService:
     def create_medicamento(self, payload: Dict[str, Any], user_id: Optional[str] = None) -> models.Medicamento:
         m = models.Medicamento(**payload)
         m.created_by = user_id
-        # compute normalized principio_activo_search if provided
+       
         if getattr(m, 'principio_activo', None):
             m.principio_activo_search = normalize_text(m.principio_activo)
-        # perform atomic transaction using explicit commit/rollback
+        
         try:
             self.repo.create(m)
             self.db.flush()
@@ -81,7 +81,7 @@ class MedicamentoService:
         if not m:
             return None
 
-        # apply changes and collect audit entries
+        
         audit_entries = []
         for field, new in changes.items():
             old = getattr(m, field)
@@ -92,9 +92,9 @@ class MedicamentoService:
         if not audit_entries:
             return {'updated': False}
 
-        # set updated_by and perform atomic update + audit log creation
+        
         m.updated_by = user_id
-        # if principio_activo changed, update normalized search column
+        
         if 'principio_activo' in changes:
             if changes.get('principio_activo'):
                 m.principio_activo_search = normalize_text(changes.get('principio_activo'))
@@ -121,15 +121,15 @@ class MedicamentoService:
         if not m:
             return None
 
-        # count movimientos usando MovimientoRepository (ISP)
+       
         count = self.movimiento_repo.count_movimientos(med_id)
 
         from datetime import datetime
 
         if count and count > 0:
-            # Business rule: if there are dependencies, DO NOT delete; mark as INACTIVO
+            
             m.estado = models.EstadoEnum.INACTIVO
-            # keep is_deleted False to preserve record for history, but mark inactive
+            
             m.is_deleted = False
             m.deleted_by = None
             m.deleted_at = None
@@ -148,9 +148,7 @@ class MedicamentoService:
                     pass
             return {'deleted': False, 'dependencias': count}
 
-        # no dependencies: mark as INACTIVO instead of soft-delete
-        # Business rule: Para poder reactivar, NO marcar como is_deleted=True
-        # Solo cambiar estado a INACTIVO
+        
         m.estado = models.EstadoEnum.INACTIVO
         m.is_deleted = False  # Mantener False para que pueda reactivarse
         m.deleted_by = user_id
@@ -176,12 +174,12 @@ class MedicamentoService:
         if not m:
             return None
 
-        # business rule: cannot reactivate if fecha_vencimiento is in the past
+       
         from datetime import date
         if m.fecha_vencimiento < date.today():
             return {'reactivated': False, 'reason': 'expired'}
 
-        # clear deleted flags and set activo
+     
         m.is_deleted = False
         m.estado = models.EstadoEnum.ACTIVO
         m.deleted_by = None
@@ -217,7 +215,7 @@ class MedicamentoService:
         if not m:
             return {'ok': False, 'reason': 'not_found'}
 
-        # validations
+        
         if m.estado != models.EstadoEnum.ACTIVO:
             return {'ok': False, 'reason': 'inactive'}
         if m.fecha_vencimiento < date.today():
@@ -226,27 +224,27 @@ class MedicamentoService:
         if tipo == 'SALIDA' and m.stock < cantidad:
             return {'ok': False, 'reason': 'insufficient_stock', 'available': m.stock}
 
-        # perform update and create movimiento atomically using commit/rollback
+    
         try:
-            # update stock
+            
             if tipo == 'ENTRADA':
                 m.stock = m.stock + cantidad
             else:
                 m.stock = m.stock - cantidad
 
-            # create Movimiento and persist usando MovimientoRepository (ISP)
+          
             mv = models.Movimiento(medicamento_id=m.id, tipo=models.MovimientoTipoEnum[tipo], cantidad=cantidad, usuario_id=usuario_id, motivo=motivo)
             self.movimiento_repo.create_movimiento(mv)
             self.repo.update(m)
 
-            # flush so mv.id is assigned by the DB
+            
             self.db.flush()
 
-            # create audit log referring to the movimiento id
+           
             al = models.AuditLog(entidad='movimientos', entidad_id=mv.id, usuario_id=usuario_id, accion='CREATE')
             self.db.add(al)
 
-            # commit everything together
+          
             self.db.commit()
 
             try:
@@ -262,15 +260,15 @@ class MedicamentoService:
                 pass
             return {'ok': False, 'reason': 'error'}
 
-    # --- search helpers for HU-1.03 ---
+   
     def search_by_principio_activo(self, normalized_q: str, limit: int = 8):
-        # search in principio_activo_search using LIKE (normalized values expected)
+       
         q = f"%{normalized_q}%"
         return self.db.query(models.Medicamento).filter(models.Medicamento.principio_activo_search.ilike(q), models.Medicamento.is_deleted == False).limit(limit).all()
 
     def search_by_nombre(self, normalized_q: str, limit: int = 8):
         q = f"%{normalized_q}%"
-        # For the 'nombre' filter we must match only the `nombre` column (not presentacion)
+       
         return self.db.query(models.Medicamento).filter(
             models.Medicamento.nombre.ilike(q),
             models.Medicamento.is_deleted == False
