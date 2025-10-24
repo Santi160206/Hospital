@@ -1,0 +1,18 @@
+@using FrontEndBlazor.Services
+@inject IAuthService AuthService
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+    
+    protected override async Task OnInitializedAsync()
+    {
+        // Inicializar autenticación al inicio de la aplicación
+        await AuthService.LoadTokenAsync();
+    }
+}
+
+@* AuthenticationGate carga el token al inicio.
+   La protección de rutas se maneja en cada página individual. *@
+@ChildContent
+
