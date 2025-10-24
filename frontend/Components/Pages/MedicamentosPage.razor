@@ -1,4 +1,7 @@
 @page "/MedicamentosPage"
+@using System.Globalization
+@using System.Text
+@using System.Text.Json;
 @using FrontEndBlazor.Models
 @using FrontEndBlazor.Services
 @using System.Threading.Tasks
@@ -478,14 +481,58 @@
                                         <tbody>
                                             @foreach (var log in auditLogs.OrderByDescending(l => l.Timestamp))
                                             {
+                                                string detalles = "N/A";
+
+                                                // Convertir Metadatos a string de forma segura
+                                                var metadatosStr = log.Metadatos?.ToString();
+
+                                                if (!string.IsNullOrWhiteSpace(metadatosStr) && metadatosStr != "N/A")
+                                                {
+                                                    try
+                                                    {
+                                                        using var jsonDoc = JsonDocument.Parse(metadatosStr);
+                                                        var root = jsonDoc.RootElement;
+
+                                                        if (root.TryGetProperty("dependencias", out var dep))
+                                                        {
+                                                            detalles = $"Dependencias afectadas: {dep.GetInt32()}";
+                                                        }
+                                                        else
+                                                        {
+                                                            detalles = metadatosStr;
+                                                        }
+                                                    }
+                                                    catch
+                                                    {
+                                                        // Si no se puede parsear como JSON, mostrar texto plano
+                                                        detalles = metadatosStr;
+                                                    }
+                                                }
+
                                                 <tr>
                                                     <td><small>@log.Timestamp.ToString("dd/MM/yyyy HH:mm")</small></td>
-                                                    <td><span class="badge bg-secondary">@log.Accion</span></td>
+
+                                                    <td>
+                                                        @if (log.Accion == "REACTIVATE")
+                                                        {
+                                                            <span class="badge bg-success">@log.Accion</span>
+                                                        }
+                                                        else if (log.Accion == "DEACTIVATE")
+                                                        {
+                                                            <span class="badge bg-danger">@log.Accion</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge bg-secondary">@log.Accion</span>
+                                                        }
+                                                    </td>
+
                                                     <td><small>@(log.UsuarioId ?? "Sistema")</small></td>
-                                                    <td><small>@(log.Metadatos ?? "N/A")</small></td>
+                                                    <td><small>@detalles</small></td>
                                                 </tr>
                                             }
-                                        </tbody>
+                                            </tbody>
+
                                     </table>
                                 </div>
                             }
@@ -705,10 +752,10 @@
         });
     }
 
-    private async Task<bool> MostrarConfirmacion(string mensaje)
+    private async Task<bool> MostrarConfirmacion(string titulo, string mensaje)
     {
-        var result = await JS.InvokeAsync<object>("Swal.fire", new {
-            title = "¿Estás seguro?",
+        var result = await JS.InvokeAsync<JsonElement>("Swal.fire", new{
+            title = titulo,
             text = mensaje,
             icon = "warning",
             showCancelButton = true,
@@ -719,7 +766,7 @@
         });
 
         // Convertir el resultado
-        return result?.ToString()?.Contains("isConfirmed") ?? false;
+        return result.TryGetProperty("isConfirmed", out var prop) && prop.GetBoolean();
     }
     private async Task MostrarWarning(string mensaje)
     {
@@ -930,11 +977,11 @@
 
             if (isEditMode && selectedMedicamento != null)
             {
-                //  Verificar si hubo cambios
+                // Verificar si hubo cambios
                 if (!HuboCambios(formModel, originalMedicamento))
                 {
                     await MostrarWarning("No se detectaron cambios. Actualiza algún campo antes de guardar.");
-                    return; // Evita seguir con la actualización
+                    return;
                 }
 
                 var updateDto = new MedicamentoUpdateDto
@@ -949,12 +996,39 @@
                     Precio = formModel.Precio,
                     PrincipioActivo = formModel.PrincipioActivo
                 };
+                // 1️⃣ Validar fecha de vencimiento menor a 30 días
+                if (formModel.FechaVencimiento.HasValue)
+                {
+                    var diasRestantes = (formModel.FechaVencimiento.Value - DateTime.Today).TotalDays;
+                    if (diasRestantes <= 30)
+                    {
+                        bool continuar = await MostrarConfirmacion(
+                            "Fecha de vencimiento próxima",
+                            $"El medicamento vencerá en {Math.Max(0, (int)diasRestantes)} días. ¿Deseas continuar?"
+                        );
+
+                        if (!continuar) return;
+                    }
+                }
+
+                if (formModel.Stock <= formModel.MinimoStock)
+                {
+                    bool continuar = await MostrarConfirmacion(
+                        "Stock bajo",
+                        "El stock actual está igual o por debajo del mínimo establecido. ¿Deseas continuar?"
+                    );
+
+                    if (!continuar) return;
+                }
+
+                // =======================================================================
 
                 await MedicamentoService.UpdateAsync(selectedMedicamento.Id, updateDto);
                 await MostrarAlertaExito("Medicamento actualizado exitosamente");
             }
             else
             {
+                // CREACIÓN - Manejo simplificado
                 var createDto = new MedicamentoCreateDto
                 {
                     Nombre = formModel.Nombre,
@@ -967,17 +1041,49 @@
                     Precio = formModel.Precio,
                     PrincipioActivo = formModel.PrincipioActivo
                 };
+                // ======================= VALIDACIONES ADICIONALES =======================
+                // 1️⃣ Validar fecha de vencimiento menor a 30 días
+                if (formModel.FechaVencimiento.HasValue)
+                {
+                    var diasRestantes = (formModel.FechaVencimiento.Value - DateTime.Today).TotalDays;
+                    if (diasRestantes <= 30)
+                    {
+                        bool continuar = await MostrarConfirmacion(
+                            "Fecha de vencimiento próxima",
+                            $"El medicamento vencerá en {Math.Max(0, (int)diasRestantes)} días. ¿Deseas continuar?"
+                        );
+
+                        if (!continuar) return;
+                    }
+                }
+
+                if (formModel.Stock <= formModel.MinimoStock)
+                {
+                    bool continuar = await MostrarConfirmacion(
+                        "Stock bajo",
+                        "El stock actual está igual o por debajo del mínimo establecido. ¿Deseas continuar?"
+                    );
+
+                    if (!continuar) return;
+                }
+
+                // =======================================================================
 
                 await MedicamentoService.CreateAsync(createDto);
                 await MostrarAlertaExito("Medicamento creado exitosamente");
+                
+                CloseFormModal();
+                await LoadMedicamentos();
             }
-
-            CloseFormModal();
-            await LoadMedicamentos();
+        }
+        catch (HttpRequestException ex) when (ex.Message.Contains("Conflict"))
+        {
+            // Capturar el error de duplicado del backend
+            await ManejarErrorDuplicado(ex);
         }
         catch (InvalidOperationException ex)
         {
-            errorMessage = ex.Message;
+            await MostrarAlertaError(ex.Message);
         }
         catch (Exception ex)
         {
@@ -1003,6 +1109,121 @@
             actual.MinimoStock != original.MinimoStock ||
             actual.Precio != original.Precio ||
             actual.PrincipioActivo != original.PrincipioActivo;
+    }
+
+    private async Task ManejarErrorDuplicado(HttpRequestException ex)
+    {
+        try
+        {
+            // Extraer el ID del medicamento existente del mensaje de error
+            var errorMessage = ex.Message;
+            var existingId = ExtraerIdDelError(errorMessage);
+            
+            if (!string.IsNullOrEmpty(existingId))
+            {
+                // Buscar el medicamento duplicado
+                var duplicado = await MedicamentoService.GetByIdAsync(existingId);
+                
+                if (duplicado != null)
+                {
+                    if (duplicado.Estado?.Equals("INACTIVO", StringComparison.OrdinalIgnoreCase) == true)
+                    {
+                        // CORRECCIÓN: Usar Dictionary<string, object> para leer la respuesta
+                        var result = await JS.InvokeAsync<Dictionary<string, object>>("Swal.fire", new
+                        {
+                            icon = "question",
+                            title = "Medicamento inactivo encontrado",
+                            text = "Ya existe un medicamento igual pero está inactivo. ¿Desea reactivarlo?",
+                            showCancelButton = true,
+                            confirmButtonText = "Sí, reactivar",
+                            cancelButtonText = "Cancelar",
+                            confirmButtonColor = "#3085d6",
+                            cancelButtonColor = "#d33"
+                        });
+
+                        // Verificar si el usuario confirmó
+                        if (result != null && result.ContainsKey("isConfirmed") && (bool)result["isConfirmed"])
+                        {
+                            await ReactivarMedicamento(duplicado.Id);
+                            await MostrarAlertaExito("Medicamento reactivado exitosamente");
+                            CloseFormModal();
+                            await LoadMedicamentos();
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        // Medicamento activo - mostrar error
+                        var htmlContent = $@"
+                            <div style='text-align: left;'>
+                                <p>Ya existe un medicamento con:</p>
+                                <ul>
+                                    <li><strong>Nombre:</strong> {duplicado.Nombre}</li>
+                                    <li><strong>Presentación:</strong> {duplicado.Presentacion}</li>
+                                    <li><strong>Fabricante:</strong> {duplicado.Fabricante}</li>
+                                </ul>
+                            </div>";
+
+                        var result = await JS.InvokeAsync<Dictionary<string, object>>("Swal.fire", new
+                        {
+                            icon = "error",
+                            title = "Medicamento duplicado",
+                            html = htmlContent,
+                            confirmButtonText = "Ver medicamento existente",
+                            showCancelButton = true,
+                            cancelButtonText = "Cerrar",
+                            confirmButtonColor = "#3085d6",
+                            cancelButtonColor = "#d33"
+                        });
+
+                        if (result != null && result.ContainsKey("isConfirmed") && (bool)result["isConfirmed"])
+                        {
+                            OpenEditModal(duplicado);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                await MostrarAlertaError("Medicamento duplicado. No se pudo obtener la información del medicamento existente.");
+            }
+        }
+        catch (Exception innerEx)
+        {
+            await MostrarAlertaError($"Error al manejar medicamento duplicado: {innerEx.Message}");
+        }
+    }
+
+    private string ExtraerIdDelError(string errorMessage)
+    {
+        try
+        {
+            // El mensaje contiene: {"detail":{"error":"Medicamento duplicado","existing_id":"7aa833ed-1b94-4581-83a9-2b7650679e07"}}
+            var match = System.Text.RegularExpressions.Regex.Match(
+                errorMessage, 
+                @"existing_id"":""([a-fA-F0-9\-]+)"""
+            );
+            
+            return match.Success ? match.Groups[1].Value : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task ReactivarMedicamento(string id)
+    {
+        try
+        {
+            // Asumiendo que tienes un método para reactivar
+            await MedicamentoService.ReactivateAsync(id);
+        }
+        catch (Exception ex)
+        {
+            await MostrarAlertaError($"Error al reactivar medicamento: {ex.Message}");
+            throw;
+        }
     }
 
 
@@ -1039,7 +1260,7 @@
             }
             else if (result.Dependencias > 0)
             {
-                successMessage = $"Medicamento inactivado (tiene {result.Dependencias} movimiento(s) registrado(s))";
+                await MostrarWarning($"Medicamento inactivado (tiene {result.Dependencias} movimiento(s) registrado(s))");
             }
 
             CloseDeleteModal();
@@ -1047,7 +1268,10 @@
         }
         catch (InvalidOperationException ex)
         {
-            errorMessage = ex.Message;
+            if (ex.Message.Contains("permiso", StringComparison.OrdinalIgnoreCase))
+                await MostrarWarning(ex.Message);
+            else
+                await MostrarAlertaError(ex.Message);
         }
         catch (Exception ex)
         {
@@ -1095,14 +1319,14 @@
             };
 
             await MedicamentoService.CreateMovimientoAsync(selectedMedicamento.Id, dto);
-            await MostrarAlertaExito("Movimiento registrado exitosamente");
+            await MostrarAlertaExito($"Stock actualizado");
 
             CloseMovimientoModal();
             await LoadMedicamentos();
         }
         catch (InvalidOperationException ex)
         {
-            errorMessage = ex.Message;
+            await MostrarAlertaError(ex.Message);
         }
         catch (Exception ex)
         {
@@ -1207,4 +1431,23 @@
     // Modelos de formulario
     public class MedicamentoFormModel : MedicamentoCreateDto { }
     public class MovimientoFormModel : MovimientoCreateDto { }
+    private string QuitarAcentos(string texto)
+    {
+        if (string.IsNullOrWhiteSpace(texto))
+            return string.Empty;
+
+        var normalized = texto.Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder();
+
+        foreach (var c in normalized)
+        {
+            var unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(c);
+            if (unicodeCategory != UnicodeCategory.NonSpacingMark)
+                sb.Append(c);
+        }
+
+        return sb.ToString().Normalize(NormalizationForm.FormC);
+    }
+
 }
+

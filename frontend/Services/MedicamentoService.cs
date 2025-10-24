@@ -12,6 +12,7 @@ public interface IMedicamentoService
     Task<MedicamentoDto> UpdateAsync(string id, MedicamentoUpdateDto dto);
     Task<DeleteResponse> DeleteAsync(string id);
     Task<ReactivateResponse> ReactivateAsync(string id);
+    Task<bool> ExisteDuplicadoAsync(string nombre, string presentacion, string fabricante);
     Task<List<MovimientoDto>> GetMovimientosAsync(string medicamentoId);
     Task<MovimientoDto> CreateMovimientoAsync(string medicamentoId, MovimientoCreateDto dto);
     Task<List<AuditLogDto>> GetAuditLogsAsync(string medicamentoId);
@@ -239,19 +240,19 @@ public class MedicamentoService : IMedicamentoService
             var client = CreateClient();
             var response = await client.PostAsync($"/api/medicamentos/{id}/reactivar", null);
             var content = await response.Content.ReadAsStringAsync();
-            
+
             if (!response.IsSuccessStatusCode)
             {
                 if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 {
                     throw new InvalidOperationException("Medicamento no encontrado");
                 }
-                
+
                 if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
                 {
                     throw new InvalidOperationException("No es posible reactivar: la fecha de vencimiento ya expiró");
                 }
-                
+
                 throw new HttpRequestException($"Error al reactivar medicamento: {response.StatusCode} - {content}");
             }
 
@@ -267,6 +268,23 @@ public class MedicamentoService : IMedicamentoService
             throw new Exception($"Error al reactivar medicamento: {ex.Message}", ex);
         }
     }
+
+    public async Task<bool> ExisteDuplicadoAsync(string nombre, string presentacion, string fabricante)
+    {
+        var client = CreateClient();
+
+        var query = $"?nombre={Uri.EscapeDataString(nombre)}&presentacion={Uri.EscapeDataString(presentacion)}&fabricante={Uri.EscapeDataString(fabricante)}";
+
+        var response = await client.GetAsync($"api/Medicamentos/validar-duplicado{query}");
+
+        if (!response.IsSuccessStatusCode)
+            return false;
+
+        var result = await response.Content.ReadAsStringAsync();
+        return bool.TryParse(result, out var existe) && existe;
+    }
+
+
 
     public async Task<List<MovimientoDto>> GetMovimientosAsync(string medicamentoId)
     {
