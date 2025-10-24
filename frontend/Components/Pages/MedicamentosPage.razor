@@ -1128,8 +1128,7 @@
                 {
                     if (duplicado.Estado?.Equals("INACTIVO", StringComparison.OrdinalIgnoreCase) == true)
                     {
-                        // CORRECCIÓN: Usar Dictionary<string, object> para leer la respuesta
-                        var result = await JS.InvokeAsync<Dictionary<string, object>>("Swal.fire", new
+                        var result = await JS.InvokeAsync<JsonElement>("Swal.fire", new
                         {
                             icon = "question",
                             title = "Medicamento inactivo encontrado",
@@ -1141,8 +1140,10 @@
                             cancelButtonColor = "#d33"
                         });
 
-                        // Verificar si el usuario confirmó
-                        if (result != null && result.ContainsKey("isConfirmed") && (bool)result["isConfirmed"])
+                        // Leer el valor de 'isConfirmed'
+                        bool isConfirmed = result.TryGetProperty("isConfirmed", out var confirmedProp) && confirmedProp.GetBoolean();
+
+                        if (isConfirmed)
                         {
                             await ReactivarMedicamento(duplicado.Id);
                             await MostrarAlertaExito("Medicamento reactivado exitosamente");
@@ -1164,7 +1165,7 @@
                                 </ul>
                             </div>";
 
-                        var result = await JS.InvokeAsync<Dictionary<string, object>>("Swal.fire", new
+                        var result = await JS.InvokeAsync<JsonElement>("Swal.fire", new
                         {
                             icon = "error",
                             title = "Medicamento duplicado",
@@ -1176,7 +1177,10 @@
                             cancelButtonColor = "#d33"
                         });
 
-                        if (result != null && result.ContainsKey("isConfirmed") && (bool)result["isConfirmed"])
+                        // Leer el valor de 'isConfirmed'
+                        bool isConfirmed = result.TryGetProperty("isConfirmed", out var confirmedProp) && confirmedProp.GetBoolean();
+
+                        if (isConfirmed)
                         {
                             OpenEditModal(duplicado);
                         }
