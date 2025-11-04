@@ -128,3 +128,22 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
 
+class Proveedor(Base):
+    __tablename__ = 'proveedores'
+
+    id = Column(GUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id_proveedor = Column(Integer, nullable=False, unique=True)
+    nombre = Column(String(200), nullable=False)
+    direccion = Column(String(300), nullable=True)
+    producto_ofrecido = Column(String(300), nullable=True)
+    
+    estado = Column(Enum(EstadoEnum), default=EstadoEnum.ACTIVO, nullable=False)
+    is_deleted = Column(Boolean, default=False)
+    created_by = Column(String(100), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_by = Column(String(100), nullable=True)
+    updated_at = Column(DateTime, onupdate=func.now(), server_default=func.now())
+    deleted_at = Column(DateTime, nullable=True)
+    deleted_by = Column(String(100), nullable=True)
+    search_key = Column(String(400), nullable=False, unique=True)
+

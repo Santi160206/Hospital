@@ -6,7 +6,7 @@ import os
 import uvicorn
 from database.connection import engine, Base, get_db
 
-from routes import medicamentos, auth, users
+from routes import medicamentos, auth, users, proveedores
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
@@ -28,6 +28,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(medicamentos.router, prefix="/api/medicamentos", tags=["medicamentos"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
+app.include_router(proveedores.router, prefix="/api/proveedores", tags=["proveedores"])
 # app.include_router(alertas.router, prefix="/api/alertas", tags=["alertas"])  #para implementar después
 
 
