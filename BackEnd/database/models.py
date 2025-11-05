@@ -131,7 +131,7 @@ class User(Base):
 class Proveedor(Base):
     __tablename__ = 'proveedores'
 
-    id = Column(GUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     id_proveedor = Column(Integer, nullable=False, unique=True)
     nombre = Column(String(200), nullable=False)
     direccion = Column(String(300), nullable=True)
@@ -145,5 +145,7 @@ class Proveedor(Base):
     updated_at = Column(DateTime, onupdate=func.now(), server_default=func.now())
     deleted_at = Column(DateTime, nullable=True)
     deleted_by = Column(String(100), nullable=True)
-    search_key = Column(String(400), nullable=False, unique=True)
+
+    # ✅ Ahora ya no causará error al insertar
+    search_key = Column(String(400), nullable=False, unique=True, default="")
 
