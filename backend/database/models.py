@@ -48,6 +48,7 @@ class GUID(TypeDecorator):
 class EstadoEnum(enum.Enum):
     ACTIVO = "ACTIVO"
     INACTIVO = "INACTIVO"
+    ELIMINADO = "ELIMINADO"
     PENDIENTE_SYNC = "PENDIENTE_SYNC"
 
 
@@ -78,6 +79,9 @@ class Medicamento(Base):
     search_key = Column(String(400), nullable=False, unique=True)
 
     movimientos = relationship('Movimiento', back_populates='medicamento')
+    lotes = relationship('Lote', back_populates='medicamento')
+
+    id_lote = Column(GUID(), ForeignKey('Lotes.id_lote'), nullable=True)
 
 
 class MovimientoTipoEnum(enum.Enum):
@@ -136,20 +140,21 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
 
-    class Lote(Base):
-      __tablename__ = 'Lotes'
+    
+class Lote(Base):
+     __tablename__ = 'Lotes'
 
-      id_lote = Column(GUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
-      Fecha_Vencimiento = Column(Date, nullable=False)
-      Cantidad_inicial = Column(Integer, nullable=False)
-      Cantidad_disponible = Column(Integer, nullable=False)
-      Estado = Column(Enum(EstadoEnum), default=EstadoEnum.ACTIVO, nullable=False)
+     id_lote = Column(GUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
+     Fecha_Vencimiento = Column(Date, nullable=False)
+     Cantidad_inicial = Column(Integer, nullable=False)
+     Cantidad_disponible = Column(Integer, nullable=False)
+     Estado = Column(Enum(EstadoEnum), default=EstadoEnum.ACTIVO, nullable=False)
 
-      medicamento = relationship('Medicamento', back_populates='lotes')
-      Alerta = relationship('Alerta', back_populates='lotes')
-      HistorialCompra = relationship('HistorialCompra', back_populates='lotes')
+     medicamento = relationship('Medicamento', back_populates='lotes')
+     #Alerta = relationship('Alerta', back_populates='lotes')
+     #HistorialCompra = relationship('HistorialCompra', back_populates='lotes')
 
-      Id_reporte = Column(GUID(), ForeignKey('HistorialCompra.id_reporte'), nullable=False)
+     #Id_reporte = Column(GUID(), ForeignKey('HistorialCompra.id_reporte'), nullable=False)
       
 
 

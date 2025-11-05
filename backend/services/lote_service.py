@@ -58,45 +58,47 @@ class LoteService:
     # Actualizar
     # -------------------------------------------------------------------------
     def update_lote(self, lote_id: str, changes: Dict[str, Any], user_id: Optional[str] = None):
-        lote = self.lote_repo.get(lote_id)
-        if not lote:
-            return None
+     lote = self.lote_repo.get(lote_id)
+     if not lote:
+        return None
 
-        audit_entries = []
-        for field, new_value in changes.items():
-            old_value = getattr(lote, field, None)
-            if new_value != old_value:
-                setattr(lote, field, new_value)
-                audit_entries.append((field, old_value, new_value))
+     audit_entries = []
+     for field, new_value in changes.items():
+        old_value = getattr(lote, field, None)
+        if new_value != old_value:
+            setattr(lote, field, new_value)
+            audit_entries.append((field, old_value, new_value))
 
-        if not audit_entries:
-            return {'updated': False}
+     if not audit_entries:
+        return None  # ⚠️ No hay cambios → la ruta responderá 404 o similar
 
-        # Validación de fecha vencimiento
-        if 'Fecha_Vencimiento' in changes:
-            if lote.Fecha_Vencimiento < date.today():
-                return {'updated': False, 'reason': 'invalid_expiration'}
+     # Validación de fecha vencimiento
+     if 'Fecha_Vencimiento' in changes and lote.Fecha_Vencimiento < date.today():
+        raise ValueError("invalid_expiration")
 
-        try:
-            self.lote_repo.update(lote)
-            for field, old, new in audit_entries:
-                al = models.AuditLog(
-                    entidad='lotes',
-                    entidad_id=lote.id_lote,
-                    usuario_id=user_id,
-                    accion='UPDATE',
-                    campo=field,
-                    valor_anterior=str(old),
-                    valor_nuevo=str(new)
-                )
-                self.db.add(al)
-            self.db.flush()
-            self.db.refresh(lote)
-            self.db.commit()
-            return {'updated': True, 'lote': lote}
-        except Exception:
-            self.db.rollback()
-            return {'updated': False}
+     try:
+        self.lote_repo.update(lote)
+
+        for field, old, new in audit_entries:
+            al = models.AuditLog(
+                entidad='lotes',
+                entidad_id=lote.id_lote,
+                usuario_id=user_id,
+                accion='UPDATE',
+                campo=field,
+                valor_anterior=str(old),
+                valor_nuevo=str(new)
+            )
+            self.db.add(al)
+
+        self.db.flush()
+        self.db.refresh(lote)
+        self.db.commit()
+
+        return lote  
+     except Exception:
+        self.db.rollback()
+        return None
 
     # -------------------------------------------------------------------------
     # Eliminar / Desactivar

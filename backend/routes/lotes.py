@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from database.connection import get_db
 from database import models
 from auth.security import get_current_user, require_admin, is_admin
-from schemas.lote import LoteCreate, LoteOut, LoteUpdate
+from schemas.lote import LoteCreate, LoteOut, LoteUpdate, ReactivateLoteOut
 from schemas.response import MessageOut, DeleteOut, ReactivateOut
 from services.lote_service import LoteService
 from repositories.lote_repo import LoteRepository
@@ -32,28 +32,34 @@ def crear_lote(
 ):
     """
     Crea un nuevo lote para un medicamento.
-    Valida duplicados por `id_reporte` (o según reglas de negocio).
+    Valida duplicados y fecha de vencimiento.
     """
     repo = LoteRepository(db)
 
     # Validar fecha de vencimiento
     if payload.Fecha_Vencimiento < date.today():
-        raise HTTPException(status_code=400, detail="La fecha de vencimiento no puede ser anterior a hoy.")
-    
+        raise HTTPException(
+            status_code=400,
+            detail="La fecha de vencimiento no puede ser anterior a hoy."
+        )
+
     if payload.Fecha_Vencimiento <= date.today() + timedelta(days=30):
         response.headers["X-Warning"] = "El lote está próximo a vencer."
 
-    # Validar duplicado (ejemplo: un lote con el mismo Id_reporte)
-    existing = repo.find_by_reporte(payload.Id_reporte)
-    if existing:
-        raise HTTPException(status_code=409, detail="Ya existe un lote asociado a este reporte de compra.")
+    # 🔹 (Eliminado) Validación de duplicado por Id_reporte, aún no implementado
+    # existing = repo.find_by_reporte(payload.Id_reporte)
+    # if existing:
+    #     raise HTTPException(status_code=409, detail="Ya existe un lote asociado a este reporte de compra.")
 
     try:
         lote = service.create_lote(payload.model_dump(), user.get("sub") if user else None)
     except IntegrityError:
+        db.rollback()
         raise HTTPException(status_code=409, detail="Error de integridad al crear el lote.")
 
     return lote
+
+    
 
 
 # ========================
@@ -134,7 +140,6 @@ def actualizar_lote(
 
     data = payload.model_dump(exclude_unset=True)
 
-    # Validar fecha
     if "Fecha_Vencimiento" in data:
         fv = data["Fecha_Vencimiento"]
         if fv < date.today():
@@ -142,11 +147,11 @@ def actualizar_lote(
         if fv <= date.today() + timedelta(days=30):
             response.headers["X-Warning"] = "El lote está próximo a vencer."
 
-    updated = service.update_lote(lote_id, data, user.get("sub") if user else None)
-    if not updated:
+    lote_actualizado = service.update_lote(lote_id, data, user.get("sub") if user else None)
+    if not lote_actualizado:
         raise HTTPException(status_code=404, detail="Lote no encontrado o sin cambios")
 
-    return updated
+    return lote_actualizado  
 
 
 # ========================
@@ -168,15 +173,26 @@ def eliminar_lote(
 # ========================
 #      REACTIVAR
 # ========================
-@router.post("/{lote_id}/reactivar", response_model=ReactivateOut)
+@router.post("/{lote_id}/reactivar", response_model=ReactivateLoteOut)
 def reactivar_lote(
     lote_id: str,
     service: LoteService = Depends(get_lote_service),
     user: dict = Depends(require_admin)
 ):
     res = service.reactivar_lote(lote_id, user.get("sub"))
+
     if res is None:
         raise HTTPException(status_code=404, detail="Lote no encontrado")
+
     if res.get("reactivated") is False:
         raise HTTPException(status_code=400, detail="No se puede reactivar el lote (vencido o inactivo permanente)")
-    return ReactivateOut(reactivated=True, lote=res.get("lote"))
+
+    lote_db = res.get("lote")
+
+    
+    lote_out = LoteOut.model_validate(lote_db)
+
+    return ReactivateLoteOut(
+        reactivated=True,
+        lote=lote_out
+    )

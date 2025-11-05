@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-SERVER = os.getenv('DB_SERVER', 'SANTIAGO\\SQLEXPRESS')
+SERVER = os.getenv('DB_SERVER', 'SANTIAGO\DEV')
 DATABASE = os.getenv('DB_NAME', 'ProyectoInvMedicamentos')
 
 print("=" * 70)

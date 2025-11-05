@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import date
 from typing import Optional
 from uuid import UUID
@@ -10,7 +10,7 @@ class LoteBase(BaseModel):
     Cantidad_inicial: int
     Cantidad_disponible: int
     Estado: Optional[EstadoEnum] = EstadoEnum.ACTIVO
-    Id_reporte: UUID
+    # Id_reporte: UUID
 
 
 class LoteCreate(LoteBase):
@@ -26,5 +26,13 @@ class LoteUpdate(BaseModel):
 class LoteOut(LoteBase):
     id_lote: UUID
 
-    class Config:
-        orm_mode = True
+    # ✅ Pydantic v2 way
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReactivateLoteOut(BaseModel):
+    reactivated: bool
+    lote: Optional[LoteOut] = None
+
+    # ✅ Pydantic v2 way
+    model_config = ConfigDict(from_attributes=True)
