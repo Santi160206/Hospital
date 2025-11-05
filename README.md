@@ -1,76 +1,117 @@
-ProyectoInvMedicamentos - API FastAPI
+# 🏥 Proyecto: Sistema de Gestión de Inventario de Medicamentos
 
-Estructura propuesta:
+API y Frontend para la gestión integral de inventario de medicamentos, con enfoque en trazabilidad, alertas de stock/vencimiento y arquitectura limpia.
 
-- main.py -> punto de entrada FastAPI
-- database/ -> conexión y modelos SQLAlchemy
-- schemas/ -> Pydantic models
-- auth/ -> JWT helpers y dependencias
-- routes/ -> Routers REST (medicamentos)
+---
 
-Setup rápido (Windows PowerShell):
+## 🚀 Quickstart: Ejecuta el Proyecto
 
-1. Crear virtualenv
+### Requisitos Previos
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
+* **Backend (Python):** Python 3.10+
+* **Frontend (.NET):** .NET 7/8/9 SDK
+* **Base de Datos:** SQL Server o SQLite (opcional, para desarrollo).
 
-2. Variables de entorno (usar `.env` en root). Ver `.env.example`
+### ⚙️ 1. Configuración del Backend (FastAPI)
 
-3. Ejecutar servidor
+1.  **Crear Entorno Virtual e Instalar Dependencias:**
+    ```powershell
+    python -m venv .venv
+    .\.venv\Scripts\Activate.ps1
+    pip install -r backend/requirements.txt
+    ```
 
-```powershell
-uvicorn main:app --reload
-```
+2.  **Variables de Entorno:**
+    * Copia [.env.example](.env.example) a un nuevo archivo llamado `.env`.
+    * Ajusta las variables de conexión a la base de datos (`DB_SERVER`, `DB_NAME`, etc.) y el secreto JWT (`JWT_SECRET`).
 
-ProyectoInvMedicamentos - API FastAPI
+3.  **Inicializar Base de Datos:**
+    ```powershell
+    # Crea tablas y el usuario administrador inicial
+    python backend/scripts/create_admin.py
+    ```
 
-Estructura propuesta:
+4.  **Ejecutar el Servidor:**
+    ```powershell
+    uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+    ```
+    *(El servidor backend estará disponible en `http://127.0.0.1:8000`)*
 
-- `main.py` -> punto de entrada FastAPI
-- `database/` -> conexión y modelos SQLAlchemy
-- `schemas/` -> Pydantic models
-- `auth/` -> JWT helpers y dependencias
-- `routes/` -> Routers REST (medicamentos)
+### 🖥️ 2. Ejecución del Frontend (Blazor Server)
 
-Setup rápido (Windows PowerShell):
+1.  **Navegar e Iniciar:**
+    ```bash
+    cd frontend
+    dotnet restore
+    dotnet run --project FrontEndBlazor.csproj
+    ```
+2.  **Acceso:** Abre tu navegador y navega a la dirección indicada (típicamente `http://localhost:port`).
 
-1. Crear virtualenv
+---
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
+## 🌟 Arquitectura y Patrones Implementados
 
-2. Variables de entorno (usar `.env` en root). Ver `.env.example`
+El proyecto sigue una arquitectura modular y limpia, basada en Python/FastAPI para el backend.
 
-3. Crear tablas y usuario admin (solo la primera vez)
+| Capa | Propósito | Puntos Clave |
+| :--- | :--- | :--- |
+| **Routes/Controllers** | Manejo de peticiones HTTP. | Rutas **delgadas** que delegan la lógica al Service Layer. |
+| **Service Layer** | **Reglas de Negocio** y **Transacciones**. | Lógica de inventario, validaciones, y manejo del `commit` a la BD. |
+| **Repositories** | Abstracción del Acceso a Datos. | Implementa el **Repository Pattern**. No hace `commit`. |
+| **Database** | Modelos de datos. | Definidos con **SQLAlchemy**. Incluye modelos para Auditoría. |
 
-```powershell
-python scripts/create_admin.py
-```
+* **Patrones clave:** Repository Pattern, Service Layer, Dependency Injection. (Ver más detalles en [PATRONES_IMPLEMENTADOS.txt](PATRONES_IMPLEMENTADOS.txt)).
 
-4. Ejecutar servidor (usar el wrapper para cargar .env y arrancar uvicorn)
+---
 
-```powershell
-./run.ps1
-```
+## 📁 Estructura Detallada del Repositorio
 
-Alternativa: arrancar uvicorn desde Python (programmaticamente)
+| Carpeta / Archivo | Componente | Descripción de Contenido |
+| :--- | :--- | :--- |
+| **`backend/`** | **FastAPI** | Código del API, lógica de negocio y acceso a datos. |
+| ├── `main.py` | Configuración | Punto de entrada y montaje de *routers*. |
+| ├── `database/` | Modelos BD | **Modelos SQLAlchemy** ([`models.py`](backend/database/models.py)). |
+| ├── `schemas/` | DTOs/Esquemas | Modelos Pydantic para I/O (ej: `MedicamentoCreate`). |
+| ├── `routes/` | API Endpoints | Controladores para `medicamentos`, `auth`, `alertas`, `users`. |
+| ├── `services/` | Lógica Negocio | Implementación de la **Service Layer** (ej: `MedicamentoService`). |
+| ├── `repositories/` | Acceso a Datos | Implementación de Repositorios (Interfaces e Implementaciones). |
+| **`frontend/`** | **Blazor Server** | Interfaz de usuario que consume la API REST. |
+| ├── `Program.cs` | DI / Setup | Configuración de Inyección de Dependencias, `HttpClients` y Auth. |
+| ├── `Services/` | Clientes API | Lógica de comunicación con el Backend (ej: `MedicamentoService.cs`). |
+| └── `Components/Pages` | UI | Páginas y componentes Razor (ej: `Medicamentos.razor`). |
 
-```powershell
-python run_server.py
-```
+---
 
-5. Probar autenticación y endpoints
+## 🔗 Endpoints Principales de la API
 
-- Obtener token: POST http://127.0.0.1:8000/api/auth/token (form data username/password)
-- Usar token: añadir header `Authorization: Bearer <token>` para llamar a rutas protegidas.
+| Funcionalidad | Método | Ruta (Ejemplo) | Descripción | Archivo Fuente |
+| :--- | :--- | :--- | :--- | :--- |
+| **Crear Medicamento** | `POST` | `/api/medicamentos/` | Registra nuevo medicamento. | [`backend/routes/medicamentos.py`](backend/routes/medicamentos.py) |
+| **Listar Medicamentos** | `GET` | `/api/medicamentos/` | Lista todos o con filtros. | [`backend/routes/medicamentos.py`](backend/routes/medicamentos.py) |
+| **Movimiento Stock** | `POST` | `/api/medicamentos/{id}/movimientos` | Registra entrada o salida de stock. | [`backend/routes/medicamentos.py`](backend/routes/medicamentos.py) |
+| **Auditoría** | `GET` | `/api/medicamentos/{id}/audit` | Historial de auditoría. | [`backend/routes/medicamentos.py`](backend/routes/medicamentos.py) |
+| **Alertas Stock** | `GET` | `/api/alertas/stock-bajo` | Lista medicamentos con stock bajo. | [`backend/routes/alertas.py`](backend/routes/alertas.py) |
+| **Login** | `POST` | `/api/auth/login` | Obtiene token JWT. | [`backend/routes/auth.py`](backend/routes/auth.py) |
 
-Notas:
-- Configurar `DB_SERVER` y `DB_NAME` en `.env` si difieren.
-- JWT_SECRET debe ser cambiado en producción.
+---
+
+## 🛠️ Utilidades y Scripts
+
+Los scripts son herramientas clave para el mantenimiento y desarrollo:
+
+| Script | Propósito | Comando de Ejemplo |
+| :--- | :--- | :--- |
+| [`create_admin.py`](backend/scripts/create_admin.py) | **Setup inicial:** Crea la estructura de BD y el usuario `admin`. | `python backend/scripts/create_admin.py` |
+| [`crear_base_datos.py`](backend/crear_base_datos.py) | Crea la base de datos física (útil para SQL Server). | `python backend/crear_base_datos.py` |
+| [`check_inactivos.py`](backend/scripts/check_inactivos.py) | Revisa medicamentos con movimientos que fueron marcados como inactivos. | `python backend/scripts/check_inactivos.py` |
+
+---
+
+## ✅ Pruebas Unitarias
+
+El backend utiliza `pytest` para la ejecución de pruebas.
+
+```bash
+cd backend
+pip install -r requirements.txt # Asegurar dependencias de test
+pytest -q
