@@ -136,3 +136,24 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
 
+    class Lote(Base):
+      __tablename__ = 'Lotes'
+
+      id_lote = Column(GUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
+      Fecha_Vencimiento = Column(Date, nullable=False)
+      Cantidad_inicial = Column(Integer, nullable=False)
+      Cantidad_disponible = Column(Integer, nullable=False)
+      Estado = Column(Enum(EstadoEnum), default=EstadoEnum.ACTIVO, nullable=False)
+
+      medicamento = relationship('Medicamento', back_populates='lotes')
+      Alerta = relationship('Alerta', back_populates='lotes')
+      HistorialCompra = relationship('HistorialCompra', back_populates='lotes')
+
+      Id_reporte = Column(GUID(), ForeignKey('HistorialCompra.id_reporte'), nullable=False)
+      
+
+
+    
+
+
+
