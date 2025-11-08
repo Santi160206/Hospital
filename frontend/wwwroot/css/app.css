@@ -3,7 +3,8 @@ html, body {
 }
 
 :root {
-  --color-primary: #A3C4F3; 
+  --color-primary: #A3C4F3;
+  --color-primary-rgb: 163, 196, 243; /* equivalente a #A3C4F3 para transparencia */ 
   --color-bg-rgb: #E0F0FF; /* mismos valores del color anterior, se usará para un poco de transparencia */
   --color-primary-dark: #5A84C9; 
   --color-secondary: #B8E0D2; 
@@ -299,19 +300,31 @@ html, body {
 }
 
 .btn-add {
-  background-color: rgba(var(--color-primary), 0.8) !important; /* Color con transparencia*/
-  color: var(--color-text) !important;
+   background-color: rgba(var(--color-primary-rgb), 0.8) !important;
+   color: var(--color-text) !important;
+   border: none;
+   border-radius: 8px;
+   padding: 10px 20px;
+   font-weight: 600;
+   transition: all 0.3s ease;
+   box-shadow: 0 4px 6px rgba(42, 208, 133, 0.2);
 }
+
 .btn-add:hover {
   background-color: #A3C4F3AA !important;
   color: var(--color-text-secondary) !important;
-  border: var(--color-primary-dark);
+  border-color: var(--color-primary-dark) !important;
+  box-shadow: 0 3px 6px rgba(11, 43, 64, 0.6);
 }
+
 .btn-add:active {
   background-color: var(--color-primary-dark) !important;
   color: var(--color-text-invert) !important;
+  border-color: var(--color-primary-dark) !important;
   transition: background-color 0.3s ease;
+  box-shadow: 0 2px 4px rgba(42, 208, 133, 0.2);
 }
+
 
 .btn-danger {
   background-color: var(--color-accent);

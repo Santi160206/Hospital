@@ -6,7 +6,7 @@ from urllib.parse import quote_plus
 
 load_dotenv()
 
-SERVER = os.getenv('DB_SERVER', 'DESKTOP-UIQHK0S\\SQLEXPRESS')
+SERVER = os.getenv('DB_SERVER', 'localhost\\SQLEXPRESS')
 DATABASE = os.getenv('DB_NAME', 'ProyectoInvMedicamentos')
 
 odbc_str = (

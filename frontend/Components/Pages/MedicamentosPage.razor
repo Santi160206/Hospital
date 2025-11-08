@@ -1,9 +1,10 @@
 @page "/MedicamentosPage"
 @using System.Globalization
 @using System.Text
-@using System.Text.Json;
+@using System.Text.Json
 @using FrontEndBlazor.Models
 @using FrontEndBlazor.Services
+@using FrontEndBlazor.Patterns
 @using System.Threading.Tasks
 @inject IMedicamentoService MedicamentoService
 @inject IAuthService AuthService
@@ -1313,8 +1314,6 @@
         try
         {
             movimientoSubmitting = true;
-            errorMessage = string.Empty;
-
             var dto = new MovimientoCreateDto
             {
                 Tipo = movimientoModel.Tipo,
@@ -1322,15 +1321,12 @@
                 Motivo = movimientoModel.Motivo
             };
 
-            await MedicamentoService.CreateMovimientoAsync(selectedMedicamento.Id, dto);
-            await MostrarAlertaExito($"Stock actualizado");
+            var command = new RegistrarMovimientoCommand(MedicamentoService, selectedMedicamento, dto);
+            await command.ExecuteAsync();
 
+            await MostrarAlertaExito($"Stock actualizado");
             CloseMovimientoModal();
             await LoadMedicamentos();
-        }
-        catch (InvalidOperationException ex)
-        {
-            await MostrarAlertaError(ex.Message);
         }
         catch (Exception ex)
         {
@@ -1341,6 +1337,7 @@
             movimientoSubmitting = false;
         }
     }
+
 
     // Modal Detail
     private bool showDetailModal = false;

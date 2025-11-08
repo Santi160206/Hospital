@@ -227,7 +227,10 @@ class MedicamentoService:
             self.db.flush()
 
             #crea audit logs
-            al = models.AuditLog(entidad='movimientos', entidad_id=mv.id, usuario_id=usuario_id, accion='CREATE')
+            al = models.AuditLog(entidad='movimientos', 
+                                 entidad_id=mv.id, 
+                                 usuario_id=usuario_id, 
+                                 accion='CREATE')
             self.db.add(al)
 
             #commit de todo
