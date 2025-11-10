@@ -58,6 +58,16 @@ class MedicamentoService:
             self.db.flush()
             self.db.refresh(m)
             self.db.commit()
+            
+            # VERIFICACIÓN AUTOMÁTICA DE ALERTAS EN TIEMPO REAL
+            try:
+                from services.alert_service import AlertService
+                alert_service = AlertService(self.db)
+                alert_service.check_medicamento_alerts(str(m.id))
+            except Exception as e:
+                # No fallar la creación si hay error en alertas
+                print(f"Error verificando alertas para medicamento {m.id}: {e}")
+            
             return m
         except Exception:
             try:
@@ -101,6 +111,18 @@ class MedicamentoService:
             self.db.flush()
             self.db.refresh(m)
             self.db.commit()
+            
+            # VERIFICACIÓN AUTOMÁTICA DE ALERTAS EN TIEMPO REAL
+            # Si cambió stock, minimo_stock o fecha_vencimiento, verificar alertas
+            campos_relevantes = {'stock', 'minimo_stock', 'fecha_vencimiento'}
+            if any(field in campos_relevantes for field, _, _ in audit_entries):
+                try:
+                    from services.alert_service import AlertService
+                    alert_service = AlertService(self.db)
+                    alert_service.check_medicamento_alerts(str(m.id))
+                except Exception as e:
+                    print(f"Error verificando alertas para medicamento {m.id}: {e}")
+            
             return {'updated': True, 'medicamento': m}
         except Exception:
             try:
@@ -181,6 +203,16 @@ class MedicamentoService:
             self.db.flush()
             self.db.refresh(m)
             self.db.commit()
+            
+            # VERIFICACIÓN AUTOMÁTICA DE ALERTAS EN TIEMPO REAL
+            # Al reactivar, verificar si necesita alertas
+            try:
+                from services.alert_service import AlertService
+                alert_service = AlertService(self.db)
+                alert_service.check_medicamento_alerts(str(m.id))
+            except Exception as e:
+                print(f"Error verificando alertas para medicamento {m.id}: {e}")
+            
             return {'reactivated': True, 'medicamento': m}
         except Exception:
             try:
@@ -237,6 +269,24 @@ class MedicamentoService:
                 self.db.refresh(mv)
             except Exception:
                 pass
+            
+            # VERIFICACIÓN AUTOMÁTICA DE ALERTAS EN TIEMPO REAL
+            # Después de cada movimiento, verificar si se debe generar/resolver alerta de stock
+            try:
+                from services.alert_service import AlertService
+                alert_service = AlertService(self.db)
+                alert_result = alert_service.check_medicamento_alerts(str(m.id))
+                
+                # Log si se creó/actualizó alerta
+                if alert_result.get('stock_alert'):
+                    action = alert_result['stock_alert'].get('action')
+                    if action in ['created', 'updated']:
+                        alert_type = alert_result['stock_alert'].get('type')
+                        print(f"Alerta automática: {alert_type} para {m.nombre} (Stock: {m.stock})")
+                    elif action == 'resolved':
+                        print(f"Alerta resuelta automáticamente para {m.nombre} (Stock normalizado: {m.stock})")
+            except Exception as e:
+                print(f"Error verificando alertas para medicamento {m.id}: {e}")
 
             return {'ok': True, 'movimiento': mv, 'stock': m.stock}
         except Exception:

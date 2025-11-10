@@ -128,3 +128,70 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
 
+
+class TipoAlertaEnum(enum.Enum):
+    STOCK_MINIMO = 'STOCK_MINIMO'
+    STOCK_CRITICO = 'STOCK_CRITICO'
+    STOCK_AGOTADO = 'STOCK_AGOTADO'
+    VENCIMIENTO_PROXIMO = 'VENCIMIENTO_PROXIMO'
+    VENCIMIENTO_INMEDIATO = 'VENCIMIENTO_INMEDIATO'
+    VENCIDO = 'VENCIDO'
+
+
+class EstadoAlertaEnum(enum.Enum):
+    ACTIVA = 'ACTIVA'
+    PENDIENTE_REPOSICION = 'PENDIENTE_REPOSICION'
+    RESUELTA = 'RESUELTA'
+
+
+class PrioridadAlertaEnum(enum.Enum):
+    BAJA = 'BAJA'
+    MEDIA = 'MEDIA'
+    ALTA = 'ALTA'
+    CRITICA = 'CRITICA'
+
+
+class Alerta(Base):
+    """
+    Modelo para sistema de alertas automatizado.
+    HU-2.01: Alertas de stock bajo
+    HU-2.02: Alertas de vencimiento
+    
+    Incluye:
+    - Persistencia de alertas generadas
+    - Historial completo con estados
+    - Priorización automática
+    - Trazabilidad de acciones
+    """
+    __tablename__ = 'alertas'
+    
+    id = Column(GUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    medicamento_id = Column(GUID(), ForeignKey('medicamentos.id'), nullable=False)
+    tipo = Column(Enum(TipoAlertaEnum), nullable=False)
+    estado = Column(Enum(EstadoAlertaEnum), default=EstadoAlertaEnum.ACTIVA, nullable=False)
+    prioridad = Column(Enum(PrioridadAlertaEnum), nullable=False)
+    mensaje = Column(String(500), nullable=False)
+    
+    # Datos específicos para alertas de stock
+    stock_actual = Column(Integer, nullable=True)
+    stock_minimo = Column(Integer, nullable=True)
+    
+    # Datos específicos para alertas de vencimiento
+    fecha_vencimiento = Column(Date, nullable=True)
+    dias_restantes = Column(Integer, nullable=True)
+    lote = Column(String(100), nullable=True)
+    
+    # Metadatos adicionales
+    metadatos = Column(JSON, nullable=True)
+    
+    # Auditoría y trazabilidad
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now(), server_default=func.now())
+    resuelta_at = Column(DateTime, nullable=True)
+    resuelta_by = Column(String(100), nullable=True)
+    notificada = Column(Boolean, default=False)
+    notificada_at = Column(DateTime, nullable=True)
+    
+    # Relación con medicamento
+    medicamento = relationship('Medicamento', backref='alertas')
+

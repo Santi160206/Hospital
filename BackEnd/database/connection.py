@@ -6,8 +6,8 @@ from urllib.parse import quote_plus
 
 load_dotenv()
 
-SERVER = os.getenv('DB_SERVER', 'DESKTOP-UIQHK0S\\SQLEXPRESS')
-DATABASE = os.getenv('DB_NAME', 'ProyectoInvMedicamentos')
+SERVER = os.getenv('DB_SERVER')
+DATABASE = os.getenv('DB_NAME')
 
 odbc_str = (
     f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={SERVER};DATABASE={DATABASE};Trusted_Connection=yes"

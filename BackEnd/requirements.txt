@@ -13,3 +13,5 @@ mypy
 pytest
 httpx
 pytest-asyncio
+redis
+apscheduler

@@ -48,6 +48,9 @@ builder.Services.AddScoped<IAuthService>(sp =>
 // Register MedicamentoService (uses AuthenticatedApi client)
 builder.Services.AddScoped<IMedicamentoService, MedicamentoService>();
 
+// Register AlertaService (uses AuthenticatedApi client)
+builder.Services.AddScoped<IAlertaService, AlertaService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

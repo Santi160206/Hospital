@@ -1,0 +1,163 @@
+@using FrontEndBlazor.Models
+@using FrontEndBlazor.Services
+@inject IAlertaService AlertaService
+@inject NavigationManager NavigationManager
+
+<div class="dropdown" @onclick:stopPropagation="true">
+    <button class="btn notification-bell position-relative" type="button" id="notificationDropdown" data-bs-toggle="dropdown" aria-expanded="false" @onclick="LoadNotifications">
+        <i class="bi bi-bell-fill" style="font-size: 1.5rem; color: black;"></i>
+        @if (UnreadCount > 0)
+        {
+            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                @(UnreadCount > 99 ? "99+" : UnreadCount.ToString())
+                <span class="visually-hidden">alertas activas</span>
+            </span>
+        }
+    </button>
+
+    <ul class="dropdown-menu dropdown-menu-end notification-dropdown" aria-labelledby="notificationDropdown" style="min-width: 420px; max-width: 450px; max-height: 550px; overflow-y: auto;">
+        <li class="dropdown-header d-flex justify-content-between align-items-center">
+            <span><strong>🔔 Notificaciones</strong></span>
+            @if (Notifications.Any())
+            {
+                <button class="btn btn-sm btn-link text-decoration-none p-0" @onclick="ClearAllNotifications">
+                    Limpiar
+                </button>
+            }
+        </li>
+        <li><hr class="dropdown-divider"></li>
+        
+        @if (isLoading)
+        {
+            <li class="px-3 py-3 text-center">
+                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                    <span class="visually-hidden">Cargando...</span>
+                </div>
+                <p class="mt-2 mb-0 small text-muted">Cargando notificaciones...</p>
+            </li>
+        }
+        else if (!Notifications.Any())
+        {
+            <li class="px-3 py-3 text-center">
+                <i class="bi bi-check-circle text-success" style="font-size: 2rem;"></i>
+                <p class="mt-2 mb-0 small text-muted">No hay notificaciones nuevas</p>
+            </li>
+        }
+        else
+        {
+            @foreach (var notification in Notifications.Take(10))
+            {
+                <li>
+                    <a class="dropdown-item notification-item py-2" href="#" @onclick="() => GoToAlertas()" @onclick:preventDefault>
+                        <div class="d-flex align-items-start">
+                            <div class="notification-icon me-2">
+                                @notification.EventIcon
+                            </div>
+                            <div class="flex-grow-1" style="min-width: 0; max-width: 100%;">
+                                <div class="fw-bold small notification-text">@notification.MedicamentoNombre</div>
+                                <div class="text-muted notification-text" style="font-size: 0.75rem;">
+                                    @notification.MedicamentoFabricante
+                                </div>
+                                <div class="small mt-1 notification-text">@notification.Mensaje</div>
+                                <div class="text-muted notification-text" style="font-size: 0.7rem;">
+                                    <i class="bi bi-clock"></i> @GetRelativeTime(notification.Timestamp)
+                                </div>
+                            </div>
+                            <span class="badge @GetPriorityBadge(notification.Priority) ms-2" style="flex-shrink: 0; align-self: flex-start;">
+                                @notification.Priority
+                            </span>
+                        </div>
+                    </a>
+                </li>
+                <li><hr class="dropdown-divider m-0"></li>
+            }
+            
+            <li class="dropdown-footer">
+                <a href="/AlertasPage" class="btn btn-sm btn-outline-primary" style="width: 100%; max-width: 100%;">
+                    Ver todas las alertas
+                </a>
+            </li>
+        }
+    </ul>
+</div>
+
+@code {
+    [Parameter]
+    public int UnreadCount { get; set; }
+    
+    [Parameter]
+    public EventCallback OnNotificationsLoaded { get; set; }
+    
+    private List<NotificacionDto> Notifications { get; set; } = new();
+    private bool isLoading = false;
+
+    private async Task LoadNotifications()
+    {
+        isLoading = true;
+        try
+        {
+            var notificaciones = await AlertaService.GetMisNotificacionesAsync(15);
+            
+            // Deduplicar por alert_id
+            Notifications = notificaciones
+                .GroupBy(n => n.AlertId)
+                .Select(g => g.First())
+                .Take(10)
+                .ToList();
+            
+            await OnNotificationsLoaded.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error cargando notificaciones: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ClearAllNotifications()
+    {
+        try
+        {
+            await AlertaService.LimpiarNotificacionesAsync();
+            Notifications.Clear();
+            UnreadCount = 0;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error limpiando notificaciones: {ex.Message}");
+        }
+    }
+
+    private void GoToAlertas()
+    {
+        NavigationManager.NavigateTo("/AlertasPage");
+    }
+
+    private string GetPriorityBadge(string priority)
+    {
+        return priority?.ToUpper() switch
+        {
+            "CRITICA" => "bg-danger",
+            "ALTA" => "bg-warning text-dark",
+            "MEDIA" => "bg-info",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetRelativeTime(string timestamp)
+    {
+        if (DateTime.TryParse(timestamp, out var dateTime))
+        {
+            var diff = DateTime.Now - dateTime;
+            if (diff.TotalMinutes < 1) return "Hace un momento";
+            if (diff.TotalMinutes < 60) return $"Hace {(int)diff.TotalMinutes} min";
+            if (diff.TotalHours < 24) return $"Hace {(int)diff.TotalHours}h";
+            return $"Hace {(int)diff.TotalDays} días";
+        }
+        return "Reciente";
+    }
+}

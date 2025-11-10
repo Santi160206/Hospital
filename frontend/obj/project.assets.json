@@ -13,11 +13,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\santi\\Downloads\\pelis\\prueba\\Hospital-dev\\frontend\\FrontEndBlazor.csproj",
+      "projectUniqueName": "C:\\Users\\santi\\Downloads\\redis\\Hospital-SantiagoGG\\hospital\\frontend\\FrontEndBlazor.csproj",
       "projectName": "FrontEndBlazor",
-      "projectPath": "C:\\Users\\santi\\Downloads\\pelis\\prueba\\Hospital-dev\\frontend\\FrontEndBlazor.csproj",
+      "projectPath": "C:\\Users\\santi\\Downloads\\redis\\Hospital-SantiagoGG\\hospital\\frontend\\FrontEndBlazor.csproj",
       "packagesPath": "C:\\Users\\santi\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\santi\\Downloads\\pelis\\prueba\\Hospital-dev\\frontend\\obj\\",
+      "outputPath": "C:\\Users\\santi\\Downloads\\redis\\Hospital-SantiagoGG\\hospital\\frontend\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\santi\\AppData\\Roaming\\NuGet\\NuGet.Config"

@@ -6,7 +6,7 @@ import os
 import uvicorn
 from database.connection import engine, Base, get_db
 
-from routes import medicamentos, auth, users
+from routes import medicamentos, auth, users, alertas
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
@@ -28,7 +28,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(medicamentos.router, prefix="/api/medicamentos", tags=["medicamentos"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
-# app.include_router(alertas.router, prefix="/api/alertas", tags=["alertas"])  #para implementar después
+app.include_router(alertas.router, prefix="/api/alertas", tags=["alertas"])
 
 
 @app.get("/")
@@ -40,16 +40,46 @@ async def root():
 async def lifespan(app: FastAPI):
     #crea tablas
     Base.metadata.create_all(bind=engine)
+    
+    # Inicializar sistema de alertas
+    from database.redis_client import redis_client
+    from observers.alert_observer import setup_alert_observers
+    from jobs.alert_monitor import alert_monitor
+
+    # Configurar observadores
+    db = next(get_db())
+    try:
+        setup_alert_observers(
+            redis_client=redis_client,
+            db_session=db,
+            enable_console_log=os.getenv('ALERT_CONSOLE_LOG', 'false').lower() == 'true'
+        )
+        
+        # Sincronizar notificaciones existentes desde BD a Redis
+        from database.models import Alerta, EstadoAlertaEnum
+        alertas_activas = db.query(Alerta).filter(Alerta.estado == EstadoAlertaEnum.ACTIVA).all()
+        redis_client.sync_notifications_from_db(db, alertas_activas)
+        
+    finally:
+        db.close()
+    
+    # Iniciar monitor de alertas automático
+    try:
+        alert_monitor.start()
+    except Exception as e:
+        print(f"Error iniciando alert monitor: {e}")
+    
+    #print("="*60 + "\n")
+    
+    # Crear usuario admin si no existe
     try:
         from services.user_service import UserService
         from auth.passwords import hash_password
-        import os
 
         db = next(get_db())
         usvc = UserService(db)
         admin_count = usvc.count_admins()
         if admin_count == 0:
-            # attempt to create admin from environment variables
             admin_user = os.getenv('ADMIN_USERNAME')
             admin_pass = os.getenv('ADMIN_PASSWORD')
             admin_email = os.getenv('ADMIN_EMAIL')
@@ -63,14 +93,24 @@ async def lifespan(app: FastAPI):
                 }
                 try:
                     usvc.create_admin(payload)
-                    print('Admin user created from environment variables')
+                    print('Admin creado exitosamente')
                 except Exception as e:
-                    print('Failed to create admin user at startup:', e)
+                    print(f'Error al crear admin: {e}')
             else:
-                print('WARNING: No admin user exists and ADMIN_* env vars are not set. Please create an admin via the protected /api/users/create_admin endpoint or set ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL.')
+                print('Advertencia: No se creó admin porque no se proporcionaron variables de entorno.')
     except Exception as _:
         pass
+    finally:
+        db.close()
+    
     yield
+    
+    # Cleanup al cerrar
+    print("\nDeteniendo servicios...")
+    try:
+        alert_monitor.stop()
+    except:
+        pass
 
 
 app.router.lifespan_context = lifespan

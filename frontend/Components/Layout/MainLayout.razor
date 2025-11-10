@@ -1,4 +1,9 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@using FrontEndBlazor.Models
+@using FrontEndBlazor.Services
+@inject IAlertaService AlertaService
+@inject IAuthService AuthService
+@implements IDisposable
 
 <div class="page">
     <div class="sidebar">
@@ -6,8 +11,14 @@
     </div>
 
     <main>
-        <div class="top-row px-4">
+        <div class="top-row px-4 d-flex justify-content-between align-items-center">
             <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+            
+            <!-- Campana de notificaciones (solo si está autenticado) -->
+            @if (isAuthenticated)
+            {
+                <NotificationBell UnreadCount="@unreadCount" OnNotificationsLoaded="@HandleNotificationsLoaded" />
+            }
         </div>
 
         <article class="content px-4">
@@ -16,8 +27,99 @@
     </main>
 </div>
 
+<!-- Sistema de notificaciones toast (solo si está autenticado) -->
+@if (isAuthenticated)
+{
+    <NotificationToast ActiveNotifications="@toastNotifications" OnDismiss="@DismissToast" />
+}
+
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private int unreadCount = 0;
+    private List<NotificacionDto> toastNotifications = new();
+    private System.Threading.Timer? pollTimer;
+    private List<string> shownAlertIds = new();
+    private bool isAuthenticated = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Verificar autenticación
+        isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        
+        // Solo iniciar polling si está autenticado (cada 5 segundos para actualización rápida)
+        if (isAuthenticated)
+        {
+            pollTimer = new System.Threading.Timer(async _ =>
+            {
+                await CheckForNewAlerts();
+            }, null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+        }
+    }
+
+    private async Task CheckForNewAlerts()
+    {
+        try
+        {
+            // Obtener notificaciones recientes (solo alertas activas desde backend)
+            var notificaciones = await AlertaService.GetMisNotificacionesAsync(100);
+            
+            // Deduplicar por alert_id (eliminar duplicados que puedan venir del backend)
+            var uniqueNotifications = notificaciones
+                .GroupBy(n => n.AlertId)
+                .Select(g => g.First())
+                .ToList();
+            
+            // Actualizar contador: Solo alertas activas
+            unreadCount = uniqueNotifications.Count;
+            
+            // Mostrar como toast solo las nuevas (no mostradas antes)
+            var newNotifications = uniqueNotifications
+                .Where(n => !shownAlertIds.Contains(n.AlertId))
+                .ToList();
+            
+            foreach (var notification in newNotifications)
+            {
+                // Solo mostrar eventos 'created' como toast
+                if (notification.EventType == "created")
+                {
+                    toastNotifications.Add(notification);
+                    shownAlertIds.Add(notification.AlertId);
+                    
+                    // Auto-dismissar después de 10 segundos
+                    _ = Task.Delay(10000).ContinueWith(_ => DismissToast(notification.AlertId));
+                }
+            }
+            
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error en polling de alertas: {ex.Message}");
+        }
+    }
+
+    private Task HandleNotificationsLoaded()
+    {
+        // Cuando el usuario ve las notificaciones, resetear contador
+        unreadCount = 0;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task DismissToast(string alertId)
+    {
+        toastNotifications.RemoveAll(n => n.AlertId == alertId);
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        pollTimer?.Dispose();
+    }
+}
