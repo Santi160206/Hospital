@@ -52,11 +52,12 @@ def get_alertas_activas(
     user_role = user.get('role', '').lower()
     
     if user_role == 'compras':
-        # Compras: Solo alertas de stock
+        # Compras: Alertas de stock Y órdenes retrasadas
         alertas = [a for a in alertas if a.tipo in [
             TipoAlertaEnum.STOCK_MINIMO, 
             TipoAlertaEnum.STOCK_CRITICO, 
-            TipoAlertaEnum.STOCK_AGOTADO
+            TipoAlertaEnum.STOCK_AGOTADO,
+            TipoAlertaEnum.ORDEN_RETRASADA
         ]]
     elif user_role == 'farmaceutico':
         # Farmacéutico: Solo alertas de vencimiento
@@ -67,17 +68,30 @@ def get_alertas_activas(
         ]]
     # Admin: no filtra, ve todas las alertas
     
-    #información del medicamento
+    #información del medicamento o de la orden
     result = []
     for alerta in alertas[:limit]:
-        med = db.query(Medicamento).filter(Medicamento.id == alerta.medicamento_id).first()
-        if med:
+        if alerta.medicamento_id:
+            # Alerta de medicamento
+            med = db.query(Medicamento).filter(Medicamento.id == alerta.medicamento_id).first()
+            if med:
+                alerta_dict = {
+                    **alerta.__dict__,
+                    'medicamento_nombre': med.nombre,
+                    'medicamento_presentacion': med.presentacion,
+                    'medicamento_fabricante': med.fabricante,
+                    'medicamento_lote': med.lote
+                }
+                result.append(AlertaWithMedicamento(**alerta_dict))
+        else:
+            # Alerta de orden (sin medicamento asociado)
+            metadatos = alerta.metadatos or {}
             alerta_dict = {
                 **alerta.__dict__,
-                'medicamento_nombre': med.nombre,
-                'medicamento_presentacion': med.presentacion,
-                'medicamento_fabricante': med.fabricante,
-                'medicamento_lote': med.lote
+                'medicamento_nombre': metadatos.get('numero_orden', 'Orden de compra'),
+                'medicamento_presentacion': f"{metadatos.get('dias_retraso', 0)} días de retraso",
+                'medicamento_fabricante': metadatos.get('proveedor_nombre', ''),
+                'medicamento_lote': metadatos.get('proveedor_nit', '')
             }
             result.append(AlertaWithMedicamento(**alerta_dict))
     
@@ -116,11 +130,12 @@ def get_historial_alertas(
     user_role = user.get('role', '').lower()
     
     if user_role == 'compras':
-        # Compras: Solo alertas de stock
+        # Compras: Alertas de stock Y órdenes retrasadas
         q = q.filter(Alerta.tipo.in_([
             TipoAlertaEnum.STOCK_MINIMO, 
             TipoAlertaEnum.STOCK_CRITICO, 
-            TipoAlertaEnum.STOCK_AGOTADO
+            TipoAlertaEnum.STOCK_AGOTADO,
+            TipoAlertaEnum.ORDEN_RETRASADA
         ]))
     elif user_role == 'farmaceutico':
         # Farmacéutico: Solo alertas de vencimiento
@@ -145,17 +160,30 @@ def get_historial_alertas(
     
     alertas = q.order_by(desc(Alerta.created_at)).limit(limit).all()
     
-    # Enriquecer con información del medicamento
+    # Enriquecer con información del medicamento o de la orden
     result = []
     for alerta in alertas:
-        med = db.query(Medicamento).filter(Medicamento.id == alerta.medicamento_id).first()
-        if med:
+        if alerta.medicamento_id:
+            # Alerta de medicamento
+            med = db.query(Medicamento).filter(Medicamento.id == alerta.medicamento_id).first()
+            if med:
+                alerta_dict = {
+                    **alerta.__dict__,
+                    'medicamento_nombre': med.nombre,
+                    'medicamento_presentacion': med.presentacion,
+                    'medicamento_fabricante': med.fabricante,
+                    'medicamento_lote': med.lote
+                }
+                result.append(AlertaWithMedicamento(**alerta_dict))
+        else:
+            # Alerta de orden (sin medicamento asociado)
+            metadatos = alerta.metadatos or {}
             alerta_dict = {
                 **alerta.__dict__,
-                'medicamento_nombre': med.nombre,
-                'medicamento_presentacion': med.presentacion,
-                'medicamento_fabricante': med.fabricante,
-                'medicamento_lote': med.lote
+                'medicamento_nombre': metadatos.get('numero_orden', 'Orden de compra'),
+                'medicamento_presentacion': f"{metadatos.get('dias_retraso', 0)} días de retraso",
+                'medicamento_fabricante': metadatos.get('proveedor_nombre', ''),
+                'medicamento_lote': metadatos.get('proveedor_nit', '')
             }
             result.append(AlertaWithMedicamento(**alerta_dict))
     
@@ -252,7 +280,8 @@ def get_mis_notificaciones(
         tipos_permitidos = [
             TipoAlertaEnum.STOCK_MINIMO,
             TipoAlertaEnum.STOCK_CRITICO,
-            TipoAlertaEnum.STOCK_AGOTADO
+            TipoAlertaEnum.STOCK_AGOTADO,
+            TipoAlertaEnum.ORDEN_RETRASADA
         ]
     elif user_role == 'farmaceutico':
         tipos_permitidos = [
@@ -335,7 +364,8 @@ def get_estadisticas_alertas(
         tipos_permitidos = [
             TipoAlertaEnum.STOCK_MINIMO,
             TipoAlertaEnum.STOCK_CRITICO,
-            TipoAlertaEnum.STOCK_AGOTADO
+            TipoAlertaEnum.STOCK_AGOTADO,
+            TipoAlertaEnum.ORDEN_RETRASADA
         ]
     elif user_role == 'farmaceutico':
         tipos_permitidos = [
@@ -611,17 +641,29 @@ def get_alerta_detalle(
     if not alerta:
         raise HTTPException(status_code=404, detail="Alerta no encontrada")
     
-    #información del medicamento
-    med = db.query(Medicamento).filter(Medicamento.id == alerta.medicamento_id).first()
-    if not med:
-        raise HTTPException(status_code=404, detail="Medicamento asociado no encontrado")
-    
-    alerta_dict = {
-        **alerta.__dict__,
-        'medicamento_nombre': med.nombre,
-        'medicamento_presentacion': med.presentacion,
-        'medicamento_fabricante': med.fabricante,
-        'medicamento_lote': med.lote
-    }
+    #información del medicamento o de la orden
+    if alerta.medicamento_id:
+        # Alerta de medicamento
+        med = db.query(Medicamento).filter(Medicamento.id == alerta.medicamento_id).first()
+        if not med:
+            raise HTTPException(status_code=404, detail="Medicamento asociado no encontrado")
+        
+        alerta_dict = {
+            **alerta.__dict__,
+            'medicamento_nombre': med.nombre,
+            'medicamento_presentacion': med.presentacion,
+            'medicamento_fabricante': med.fabricante,
+            'medicamento_lote': med.lote
+        }
+    else:
+        # Alerta de orden (sin medicamento asociado)
+        metadatos = alerta.metadatos or {}
+        alerta_dict = {
+            **alerta.__dict__,
+            'medicamento_nombre': metadatos.get('numero_orden', 'Orden de compra'),
+            'medicamento_presentacion': f"{metadatos.get('dias_retraso', 0)} días de retraso",
+            'medicamento_fabricante': metadatos.get('proveedor_nombre', ''),
+            'medicamento_lote': metadatos.get('proveedor_nit', '')
+        }
     
     return AlertaWithMedicamento(**alerta_dict)

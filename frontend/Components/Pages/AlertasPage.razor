@@ -83,6 +83,7 @@
                         <option value="VENCIDO">Vencido</option>
                         <option value="VENCIMIENTO_INMEDIATO">Vence Pronto</option>
                         <option value="VENCIMIENTO_PROXIMO">Próximo a Vencer</option>
+                        <option value="ORDEN_RETRASADA">Orden Retrasada</option>
                     </select>
                 </div>
                 <div class="col-md-3">
@@ -158,13 +159,29 @@
                                 <tr class="@GetRowClass(alerta)">
                                     <td style="font-size: 1.5rem;">@alerta.TipoIcon</td>
                                     <td>
-                                        <div class="fw-bold">@alerta.MedicamentoNombre</div>
-                                        <div class="small text-muted">
-                                            @alerta.MedicamentoFabricante - @alerta.MedicamentoPresentacion
-                                        </div>
-                                        @if (!string.IsNullOrEmpty(alerta.MedicamentoLote))
+                                        @if (alerta.Tipo == TipoAlerta.ORDEN_RETRASADA)
                                         {
-                                            <div class="small text-muted">Lote: @alerta.MedicamentoLote</div>
+                                            <!-- Información de Orden de Compra -->
+                                            <div class="fw-bold">@alerta.MedicamentoNombre</div>
+                                            <div class="small text-muted">
+                                                Proveedor: @alerta.MedicamentoFabricante
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(alerta.MedicamentoPresentacion))
+                                            {
+                                                <div class="small text-muted">@alerta.MedicamentoPresentacion</div>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <!-- Información de Medicamento -->
+                                            <div class="fw-bold">@alerta.MedicamentoNombre</div>
+                                            <div class="small text-muted">
+                                                @alerta.MedicamentoFabricante - @alerta.MedicamentoPresentacion
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(alerta.MedicamentoLote))
+                                            {
+                                                <div class="small text-muted">Lote: @alerta.MedicamentoLote</div>
+                                            }
                                         }
                                     </td>
                                     <td>
@@ -178,24 +195,46 @@
                                     </td>
                                     <td>
                                         @alerta.Mensaje
-                                        @if (alerta.StockActual.HasValue)
+                                        @if (alerta.Tipo == TipoAlerta.ORDEN_RETRASADA)
                                         {
-                                            <div class="small text-muted">
-                                                Stock: @alerta.StockActual / Mínimo: @alerta.StockMinimo
+                                            <!-- Información adicional de orden retrasada -->
+                                            <div class="small mt-1">
+                                                @if (alerta.DiasRetraso.HasValue)
+                                                {
+                                                    <span class="badge bg-danger">
+                                                        ⏱️ @alerta.DiasRetraso día@(alerta.DiasRetraso > 1 ? "s" : "") de retraso
+                                                    </span>
+                                                }
+                                                @if (alerta.TotalEstimado.HasValue)
+                                                {
+                                                    <span class="badge bg-info ms-1">
+                                                        💵 $@alerta.TotalEstimado.Value.ToString("N2")
+                                                    </span>
+                                                }
                                             </div>
                                         }
-                                        @if (alerta.DiasRestantes.HasValue)
+                                        else
                                         {
-                                            <div class="small text-muted">
-                                                @if (alerta.DiasRestantes.Value < 0)
-                                                {
-                                                    <span class="text-danger">Vencido hace @Math.Abs(alerta.DiasRestantes.Value) días</span>
-                                                }
-                                                else
-                                                {
-                                                    <span>Vence en @alerta.DiasRestantes días</span>
-                                                }
-                                            </div>
+                                            <!-- Información de stock y vencimiento -->
+                                            @if (alerta.StockActual.HasValue)
+                                            {
+                                                <div class="small text-muted">
+                                                    Stock: @alerta.StockActual / Mínimo: @alerta.StockMinimo
+                                                </div>
+                                            }
+                                            @if (alerta.DiasRestantes.HasValue)
+                                            {
+                                                <div class="small text-muted">
+                                                    @if (alerta.DiasRestantes.Value < 0)
+                                                    {
+                                                        <span class="text-danger">Vencido hace @Math.Abs(alerta.DiasRestantes.Value) días</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span>Vence en @alerta.DiasRestantes días</span>
+                                                    }
+                                                </div>
+                                            }
                                         }
                                     </td>
                                     <td>

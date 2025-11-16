@@ -12,7 +12,8 @@ public enum TipoAlerta
     STOCK_AGOTADO,
     VENCIMIENTO_PROXIMO,
     VENCIMIENTO_INMEDIATO,
-    VENCIDO
+    VENCIDO,
+    ORDEN_RETRASADA
 }
 
 public enum EstadoAlerta
@@ -77,6 +78,9 @@ public class AlertaDto
     [JsonPropertyName("medicamento_lote")]
     public string MedicamentoLote { get; set; } = string.Empty;
     
+    // Metadatos adicionales (JSON genérico para información extra)
+    public Dictionary<string, object>? Metadatos { get; set; }
+    
     // Auditoría
     [JsonPropertyName("created_at")]
     public DateTime CreatedAt { get; set; }
@@ -104,6 +108,7 @@ public class AlertaDto
         TipoAlerta.VENCIDO => "❌",
         TipoAlerta.VENCIMIENTO_INMEDIATO => "⏰",
         TipoAlerta.VENCIMIENTO_PROXIMO => "📅",
+        TipoAlerta.ORDEN_RETRASADA => "🚚",
         _ => "🔔"
     };
     
@@ -132,6 +137,7 @@ public class AlertaDto
         TipoAlerta.VENCIDO => "Vencido",
         TipoAlerta.VENCIMIENTO_INMEDIATO => "Vence Pronto",
         TipoAlerta.VENCIMIENTO_PROXIMO => "Próximo a Vencer",
+        TipoAlerta.ORDEN_RETRASADA => "Orden Retrasada",
         _ => "Alerta"
     };
     
@@ -144,6 +150,80 @@ public class AlertaDto
             if (diff.TotalMinutes < 60) return $"Hace {(int)diff.TotalMinutes} min";
             if (diff.TotalHours < 24) return $"Hace {(int)diff.TotalHours}h";
             return $"Hace {(int)diff.TotalDays} días";
+        }
+    }
+    
+    // Propiedades helper para alertas de órdenes retrasadas
+    public string? NumeroOrden => Metadatos?.GetValueOrDefault("numero_orden")?.ToString();
+    public string? ProveedorNombre => Metadatos?.GetValueOrDefault("proveedor_nombre")?.ToString();
+    
+    public int? DiasRetraso
+    {
+        get
+        {
+            if (Metadatos?.GetValueOrDefault("dias_retraso") is object diasObj)
+            {
+                // Manejar JsonElement de System.Text.Json
+                if (diasObj is System.Text.Json.JsonElement jsonElement)
+                {
+                    if (jsonElement.ValueKind == System.Text.Json.JsonValueKind.Number)
+                    {
+                        return jsonElement.GetInt32();
+                    }
+                }
+                // Fallback para otros tipos
+                else if (diasObj is int intValue)
+                {
+                    return intValue;
+                }
+                else
+                {
+                    try
+                    {
+                        return Convert.ToInt32(diasObj);
+                    }
+                    catch
+                    {
+                        return null;
+                    }
+                }
+            }
+            return null;
+        }
+    }
+    
+    public decimal? TotalEstimado
+    {
+        get
+        {
+            if (Metadatos?.GetValueOrDefault("total_estimado") is object totalObj)
+            {
+                // Manejar JsonElement de System.Text.Json
+                if (totalObj is System.Text.Json.JsonElement jsonElement)
+                {
+                    if (jsonElement.ValueKind == System.Text.Json.JsonValueKind.Number)
+                    {
+                        return jsonElement.GetDecimal();
+                    }
+                }
+                // Fallback para otros tipos
+                else if (totalObj is decimal decValue)
+                {
+                    return decValue;
+                }
+                else
+                {
+                    try
+                    {
+                        return Convert.ToDecimal(totalObj);
+                    }
+                    catch
+                    {
+                        return null;
+                    }
+                }
+            }
+            return null;
         }
     }
 }

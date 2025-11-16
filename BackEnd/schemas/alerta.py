@@ -15,6 +15,7 @@ class TipoAlertaEnum(str, Enum):
     VENCIMIENTO_PROXIMO = 'VENCIMIENTO_PROXIMO'
     VENCIMIENTO_INMEDIATO = 'VENCIMIENTO_INMEDIATO'
     VENCIDO = 'VENCIDO'
+    ORDEN_RETRASADA = 'ORDEN_RETRASADA'
 
 
 class EstadoAlertaEnum(str, Enum):
@@ -43,7 +44,7 @@ class AlertaOut(BaseModel):
     HU-2.01 y HU-2.02: Información completa de alerta.
     """
     id: str
-    medicamento_id: str
+    medicamento_id: Optional[str] = None
     tipo: TipoAlertaEnum
     estado: EstadoAlertaEnum
     prioridad: PrioridadAlertaEnum

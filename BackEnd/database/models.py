@@ -136,6 +136,7 @@ class TipoAlertaEnum(enum.Enum):
     VENCIMIENTO_PROXIMO = 'VENCIMIENTO_PROXIMO'
     VENCIMIENTO_INMEDIATO = 'VENCIMIENTO_INMEDIATO'
     VENCIDO = 'VENCIDO'
+    ORDEN_RETRASADA = 'ORDEN_RETRASADA'  # HU-4.02: Alertas de órdenes retrasadas
 
 
 class EstadoAlertaEnum(enum.Enum):
@@ -156,6 +157,7 @@ class Alerta(Base):
     Modelo para sistema de alertas automatizado.
     HU-2.01: Alertas de stock bajo
     HU-2.02: Alertas de vencimiento
+    HU-4.02: Alertas de órdenes retrasadas
     
     Incluye:
     - Persistencia de alertas generadas
@@ -166,7 +168,7 @@ class Alerta(Base):
     __tablename__ = 'alertas'
     
     id = Column(GUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
-    medicamento_id = Column(GUID(), ForeignKey('medicamentos.id'), nullable=False)
+    medicamento_id = Column(GUID(), ForeignKey('medicamentos.id'), nullable=True)  # Nullable para alertas de órdenes
     tipo = Column(Enum(TipoAlertaEnum), nullable=False)
     estado = Column(Enum(EstadoAlertaEnum), default=EstadoAlertaEnum.ACTIVA, nullable=False)
     prioridad = Column(Enum(PrioridadAlertaEnum), nullable=False)
@@ -194,4 +196,126 @@ class Alerta(Base):
     
     # Relación con medicamento
     medicamento = relationship('Medicamento', backref='alertas')
+
+
+class EstadoProveedorEnum(enum.Enum):
+    ACTIVO = 'ACTIVO'
+    INACTIVO = 'INACTIVO'
+
+
+class Proveedor(Base):
+    """
+    Modelo para gestión de proveedores.
+    HU-4.01: Manejo de Proveedores
+    
+    Incluye:
+    - Información básica del proveedor
+    - Validación de NIT único
+    - Control de estado ACTIVO/INACTIVO
+    - Auditoría de creación y modificación
+    """
+    __tablename__ = 'proveedores'
+    __table_args__ = (
+        UniqueConstraint('nit', name='uq_proveedores_nit'),
+    )
+    
+    id = Column(GUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    nit = Column(String(50), nullable=False, unique=True)  # Validación numérica en service
+    nombre = Column(String(200), nullable=False)
+    telefono = Column(String(50), nullable=True)
+    email = Column(String(200), nullable=True)  # Validación de formato en schema
+    direccion = Column(String(500), nullable=True)
+    estado = Column(Enum(EstadoProveedorEnum), default=EstadoProveedorEnum.ACTIVO, nullable=False)
+    
+    # Auditoría
+    created_by = Column(String(100), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_by = Column(String(100), nullable=True)
+    updated_at = Column(DateTime, onupdate=func.now(), server_default=func.now())
+    
+    # Relaciones
+    ordenes_compra = relationship('OrdenCompra', back_populates='proveedor')
+
+
+class EstadoOrdenEnum(enum.Enum):
+    PENDIENTE = 'PENDIENTE'
+    ENVIADA = 'ENVIADA'
+    RECIBIDA = 'RECIBIDA'
+    RETRASADA = 'RETRASADA'
+
+
+class OrdenCompra(Base):
+    """
+    Modelo para gestión de órdenes de compra.
+    HU-4.02: Post-Orden
+    
+    Incluye:
+    - Gestión de estados del ciclo de vida de la orden
+    - Detección automática de retrasos
+    - Trazabilidad completa
+    - Relación con proveedor y detalles (productos)
+    """
+    __tablename__ = 'ordenes_compra'
+    __table_args__ = (
+        UniqueConstraint('numero_orden', name='uq_ordenes_numero'),
+    )
+    
+    id = Column(GUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    numero_orden = Column(String(50), nullable=False, unique=True)  # Ej: OC-2025-0001
+    proveedor_id = Column(GUID(), ForeignKey('proveedores.id'), nullable=False)
+    
+    # Fechas
+    fecha_creacion = Column(DateTime, server_default=func.now())
+    fecha_prevista_entrega = Column(Date, nullable=False)
+    fecha_envio = Column(DateTime, nullable=True)
+    fecha_recepcion = Column(DateTime, nullable=True)
+    
+    # Estado y observaciones
+    estado = Column(Enum(EstadoOrdenEnum), default=EstadoOrdenEnum.PENDIENTE, nullable=False)
+    observaciones = Column(String(1000), nullable=True)
+    
+    # Total calculado
+    total_estimado = Column(Numeric(12, 2), nullable=False, server_default="0")
+    
+    # Auditoría
+    created_by = Column(String(100), nullable=True)
+    recibido_by = Column(String(100), nullable=True)
+    updated_at = Column(DateTime, onupdate=func.now(), server_default=func.now())
+    
+    # Relaciones
+    proveedor = relationship('Proveedor', back_populates='ordenes_compra')
+    detalles = relationship('DetalleOrdenCompra', back_populates='orden', cascade='all, delete-orphan')
+
+
+class DetalleOrdenCompra(Base):
+    """
+    Modelo para items/productos de una orden de compra.
+    HU-4.02: Detalle de productos en orden
+    
+    Incluye:
+    - Productos solicitados vs recibidos
+    - Precios unitarios y subtotales
+    - Información de lote esperado
+    """
+    __tablename__ = 'detalle_orden_compra'
+    
+    id = Column(GUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    orden_compra_id = Column(GUID(), ForeignKey('ordenes_compra.id'), nullable=False)
+    medicamento_id = Column(GUID(), ForeignKey('medicamentos.id'), nullable=False)
+    
+    # Cantidades
+    cantidad_solicitada = Column(Integer, nullable=False)
+    cantidad_recibida = Column(Integer, nullable=False, default=0)
+    
+    # Precios
+    precio_unitario = Column(Numeric(12, 2), nullable=False)
+    subtotal = Column(Numeric(12, 2), nullable=False)  # cantidad_solicitada * precio_unitario
+    
+    # Información esperada del lote
+    lote_esperado = Column(String(100), nullable=True)
+    fecha_vencimiento_esperada = Column(Date, nullable=True)
+    
+    # Relaciones
+    orden = relationship('OrdenCompra', back_populates='detalles')
+    medicamento = relationship('Medicamento')
 

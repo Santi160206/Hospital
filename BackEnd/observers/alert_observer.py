@@ -131,6 +131,7 @@ class RedisNotificationObserver(AlertObserver):
         
         HU-2.01: Alertas de stock -> responsable de compras
         HU-2.02: Alertas de vencimiento -> farmacéutico/administrador
+        HU-4.02: Alertas de órdenes retrasadas -> responsable de compras
         """
         roles = []
         
@@ -141,6 +142,10 @@ class RedisNotificationObserver(AlertObserver):
         # Alertas de vencimiento -> Farmacéutico + Admin
         elif alert_type in ['VENCIMIENTO_PROXIMO', 'VENCIMIENTO_INMEDIATO', 'VENCIDO']:
             roles.extend(['farmaceutico', 'admin'])
+        
+        # Alertas de órdenes retrasadas -> Responsable de compras + Admin
+        elif alert_type == 'ORDEN_RETRASADA':
+            roles.extend(['compras', 'admin'])
         
         # Por defecto, notificar a admin
         if not roles:

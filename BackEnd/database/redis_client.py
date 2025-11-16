@@ -181,10 +181,13 @@ class RedisClient:
             # Agrupar alertas por tipo
             alertas_stock = []
             alertas_vencimiento = []
+            alertas_ordenes = []
             
             for alerta in alertas_activas:
                 if alerta.tipo in [TipoAlertaEnum.STOCK_MINIMO, TipoAlertaEnum.STOCK_CRITICO, TipoAlertaEnum.STOCK_AGOTADO]:
                     alertas_stock.append(alerta)
+                elif alerta.tipo == TipoAlertaEnum.ORDEN_RETRASADA:
+                    alertas_ordenes.append(alerta)
                 else:
                     alertas_vencimiento.append(alerta)
             
@@ -226,10 +229,27 @@ class RedisClient:
                     self.push_notification('admin', notif)
                     self.push_notification('farmaceutico', notif)
             
-            print(f"Redis sincronizado: {len(alertas_stock)} alertas stock, {len(alertas_vencimiento)} alertas vencimiento")
+            # Sincronizar alertas de órdenes retrasadas (para admin y compras)
+            for alerta in alertas_ordenes:
+                notif = {
+                    'alert_id': str(alerta.id),
+                    'event_type': 'created',
+                    'alert_type': alerta.tipo.value,
+                    'priority': alerta.prioridad.value,
+                    'mensaje': alerta.mensaje,
+                    'medicamento_nombre': alerta.metadatos.get('numero_orden', 'Orden'),
+                    'medicamento_fabricante': alerta.metadatos.get('proveedor_nombre', ''),
+                    'medicamento_presentacion': f"{alerta.metadatos.get('dias_retraso', 0)} días de retraso",
+                    'medicamento_lote': '',
+                    'timestamp': alerta.created_at.isoformat() if alerta.created_at else ''
+                }
+                self.push_notification('admin', notif)
+                self.push_notification('compras', notif)
+            
+            print(f"Redis sincronizado: {len(alertas_stock)} alertas stock, {len(alertas_vencimiento)} alertas vencimiento, {len(alertas_ordenes)} alertas ordenes")
             
         except Exception as e:
-            print(f"⚠️ Error sincronizando notificaciones: {e}")
+            print(f"[WARNING] Error sincronizando notificaciones: {e}")
     
     def remove_notification(self, user_role: str, alert_id: str):
         """

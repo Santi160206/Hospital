@@ -1,0 +1,1309 @@
+@page "/ordenesPage"
+@using FrontEndBlazor.Models
+@using FrontEndBlazor.Services
+@inject IOrdenCompraService OrdenService
+@inject IProveedorService ProveedorService
+@inject IMedicamentoService MedicamentoService
+@inject IAuthService AuthService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Órdenes de Compra</PageTitle>
+
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-clipboard-check"></i> Gestión de Órdenes de Compra</h2>
+            <p class="text-muted">HU-4.02: Ciclo completo de órdenes de compra</p>
+        </div>
+        
+        @if (puedeCrear)
+        {
+            <button class="btn btn-primary" @onclick="MostrarModalCrear">
+                <i class="bi bi-plus-circle"></i> Nueva Orden
+            </button>
+        }
+    </div>
+
+    @* Estadísticas *@
+    @if (stats != null)
+    {
+        <div class="row mb-4">
+            <div class="col-md-2">
+                <div class="card text-center border-secondary">
+                    <div class="card-body py-2">
+                        <h6 class="card-title text-secondary mb-0">Total</h6>
+                        <h3 class="display-6">@stats.Total</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-center border-warning">
+                    <div class="card-body py-2">
+                        <h6 class="card-title text-warning mb-0">Pendientes</h6>
+                        <h3 class="display-6">@stats.Pendientes</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-center border-info">
+                    <div class="card-body py-2">
+                        <h6 class="card-title text-info mb-0">Enviadas</h6>
+                        <h3 class="display-6">@stats.Enviadas</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-center border-success">
+                    <div class="card-body py-2">
+                        <h6 class="card-title text-success mb-0">Recibidas</h6>
+                        <h3 class="display-6">@stats.Recibidas</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-center border-danger">
+                    <div class="card-body py-2">
+                        <h6 class="card-title text-danger mb-0">Retrasadas</h6>
+                        <h3 class="display-6">@stats.Retrasadas</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* Filtros *@
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Estado</label>
+                    <select class="form-select" @bind="filtroEstado">
+                        <option value="">Todos</option>
+                        <option value="PENDIENTE">Pendientes</option>
+                        <option value="ENVIADA">Enviadas</option>
+                        <option value="RECIBIDA">Recibidas</option>
+                        <option value="RETRASADA">Retrasadas</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Proveedor</label>
+                    <select class="form-select" @bind="filtroProveedorId">
+                        <option value="">Todos los proveedores</option>
+                        @foreach (var prov in proveedoresDisponibles)
+                        {
+                            <option value="@prov.Id">@prov.Nombre</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" @onclick="CargarOrdenes">
+                        <i class="bi bi-search"></i> Buscar
+                    </button>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-secondary w-100" @onclick="LimpiarFiltros">
+                        <i class="bi bi-x-circle"></i> Limpiar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Mensajes *@
+    @if (!string.IsNullOrEmpty(mensajeExito))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle"></i> @mensajeExito
+            <button type="button" class="btn-close" @onclick="@(() => mensajeExito = null)"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(mensajeError))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle"></i> @mensajeError
+            <button type="button" class="btn-close" @onclick="@(() => mensajeError = null)"></button>
+        </div>
+    }
+
+    @* Tabla de órdenes *@
+    @if (cargando)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-2">Cargando órdenes...</p>
+        </div>
+    }
+    else if (ordenes.Count == 0)
+    {
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> No se encontraron órdenes con los filtros aplicados.
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Número</th>
+                                <th>Proveedor</th>
+                                <th>Fecha Prevista</th>
+                                <th>Estado</th>
+                                <th>Total</th>
+                                <th>Items</th>
+                                <th>Fecha Creación</th>
+                                <th class="text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var orden in ordenes)
+                            {
+                                <tr class="@(orden.EstaRetrasada ? "table-danger" : "")">
+                                    <td><strong>@orden.NumeroOrden</strong></td>
+                                    <td>@orden.ProveedorNombre</td>
+                                    <td>
+                                        @orden.FechaPrevistaEntrega.ToString("dd/MM/yyyy")
+                                        @if (orden.EstaRetrasada)
+                                        {
+                                            <br /><small class="text-danger"><i class="bi bi-exclamation-triangle"></i> Retrasada</small>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="@orden.EstadoBadgeClass">
+                                            <i class="@orden.EstadoIcon"></i> @orden.Estado
+                                        </span>
+                                    </td>
+                                    <td>$@orden.TotalEstimado.ToString("N2")</td>
+                                    <td>@orden.Detalles.Count</td>
+                                    <td>@orden.FechaCreacion.ToString("dd/MM/yyyy")</td>
+                                    <td class="text-center">
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <button class="btn btn-outline-info" @onclick="() => MostrarModalDetalle(orden)" title="Ver detalle">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                            
+                                            @if (puedeCrear)
+                                            {
+                                                @if (orden.PuedeEnviar)
+                                                {
+                                                    <button class="btn btn-outline-primary" @onclick="() => ConfirmarEnviar(orden)" title="Marcar como enviada">
+                                                        <i class="bi bi-box-seam"></i>
+                                                    </button>
+                                                }
+                                                
+                                                @if (orden.PuedeRecibir)
+                                                {
+                                                    <button class="btn btn-outline-success" @onclick="() => MostrarModalRecibir(orden)" title="Recibir orden">
+                                                        <i class="bi bi-check-circle"></i>
+                                                    </button>
+                                                }
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="mt-3 text-end">
+                    <small class="text-muted">Mostrando @ordenes.Count orden(es)</small>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@* ==================== MODALES ==================== *@
+
+@* Modal Crear Orden *@
+@if (mostrarModalCrear)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-plus-circle"></i> Nueva Orden de Compra
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CerrarModalCrear"></button>
+                </div>
+                
+                <EditForm Model="@ordenForm" OnValidSubmit="GuardarOrden">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="modal-body">
+                        @if (!string.IsNullOrEmpty(errorModal))
+                        {
+                            <div class="alert alert-danger alert-dismissible fade show">
+                                <i class="bi bi-exclamation-triangle"></i> @errorModal
+                                <button type="button" class="btn-close" @onclick="@(() => errorModal = null)"></button>
+                            </div>
+                        }
+                        
+                        @* Información General *@
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="bi bi-info-circle"></i> Información General</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Proveedor <span class="text-danger">*</span></label>
+                                        <InputSelect class="form-select" @bind-Value="ordenForm.ProveedorId">
+                                            <option value="">-- Seleccione un proveedor --</option>
+                                            @foreach (var prov in proveedoresDisponibles)
+                                            {
+                                                <option value="@prov.Id">@prov.Nombre (@prov.Nit)</option>
+                                            }
+                                        </InputSelect>
+                                        <ValidationMessage For="@(() => ordenForm.ProveedorId)" class="text-danger" />
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <label class="form-label">Fecha Prevista de Entrega <span class="text-danger">*</span></label>
+                                        <InputDate class="form-control" @bind-Value="ordenForm.FechaPrevistaEntrega" />
+                                        <ValidationMessage For="@(() => ordenForm.FechaPrevistaEntrega)" class="text-danger" />
+                                        <small class="form-text text-muted">Debe ser una fecha futura</small>
+                                    </div>
+                                    
+                                    <div class="col-12">
+                                        <label class="form-label">Observaciones</label>
+                                        <InputTextArea class="form-control" @bind-Value="ordenForm.Observaciones" rows="2" 
+                                                      placeholder="Observaciones adicionales (opcional)" />
+                                        <ValidationMessage For="@(() => ordenForm.Observaciones)" class="text-danger" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        @* Lista de Productos *@
+                        <div class="card">
+                            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0"><i class="bi bi-box-seam"></i> Productos (@ordenForm.Detalles.Count)</h6>
+                                <button type="button" class="btn btn-sm btn-success" @onclick="AgregarProducto">
+                                    <i class="bi bi-plus-circle"></i> Agregar Producto
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                @if (ordenForm.Detalles.Count == 0)
+                                {
+                                    <div class="alert alert-warning">
+                                        <i class="bi bi-exclamation-triangle"></i> Debe agregar al menos un producto a la orden.
+                                        <ValidationMessage For="@(() => ordenForm.Detalles)" class="d-block mt-2" />
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th style="width: 35%;">Medicamento</th>
+                                                    <th style="width: 15%;">Cantidad</th>
+                                                    <th style="width: 20%;">Precio Unit.</th>
+                                                    <th style="width: 20%;">Subtotal</th>
+                                                    <th style="width: 10%;" class="text-center">Acción</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @for (int i = 0; i < ordenForm.Detalles.Count; i++)
+                                                {
+                                                    var index = i;
+                                                    var detalle = ordenForm.Detalles[index];
+                                                    
+                                                    <tr>
+                                                        <td>
+                                                            <select class="form-select form-select-sm" 
+                                                                    @bind="detalle.MedicamentoId" 
+                                                                    @bind:after="() => OnMedicamentoSeleccionado(detalle)">
+                                                                <option value="">-- Seleccione --</option>
+                                                                @foreach (var med in medicamentosDisponibles)
+                                                                {
+                                                                    <option value="@med.Id">
+                                                                        @med.Nombre - @med.Fabricante (@med.Presentacion)
+                                                                    </option>
+                                                                }
+                                                            </select>
+                                                            @if (!string.IsNullOrEmpty(detalle.MedicamentoNombre))
+                                                            {
+                                                                <small class="text-muted d-block mt-1">
+                                                                    <strong>@detalle.MedicamentoNombre</strong><br />
+                                                                    @detalle.MedicamentoFabricante - @detalle.MedicamentoPresentacion
+                                                                </small>
+                                                            }
+                                                        </td>
+                                                        <td>
+                                                            <input type="number" class="form-control form-control-sm" 
+                                                                   @bind="detalle.CantidadSolicitada" 
+                                                                   @bind:after="StateHasChanged"
+                                                                   min="1" placeholder="Cantidad" />
+                                                        </td>
+                                                        <td>
+                                                            <input type="number" class="form-control form-control-sm" 
+                                                                   @bind="detalle.PrecioUnitario" 
+                                                                   @bind:after="StateHasChanged"
+                                                                   min="0.01" step="0.01" placeholder="Precio" />
+                                                        </td>
+                                                        <td>
+                                                            <strong class="text-success">$@detalle.Subtotal.ToString("N2")</strong>
+                                                        </td>
+                                                        <td class="text-center">
+                                                            <button type="button" class="btn btn-sm btn-outline-danger" 
+                                                                    @onclick="() => EliminarProducto(index)"
+                                                                    title="Eliminar">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                            <tfoot class="table-light">
+                                                <tr>
+                                                    <td colspan="3" class="text-end"><strong>TOTAL ESTIMADO:</strong></td>
+                                                    <td colspan="2">
+                                                        <h5 class="mb-0 text-success">$@CalcularTotal().ToString("N2")</h5>
+                                                    </td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CerrarModalCrear" disabled="@guardando">
+                            <i class="bi bi-x-circle"></i> Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary" disabled="@(guardando || ordenForm.Detalles.Count == 0)">
+                            @if (guardando)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            }
+                            <i class="bi bi-save"></i> Crear Orden
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@* Modal Ver Detalle *@
+@if (mostrarModalDetalle && ordenSeleccionada != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-eye"></i> Detalle de Orden: <strong>@ordenSeleccionada.NumeroOrden</strong>
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CerrarModalDetalle"></button>
+                </div>
+                
+                <div class="modal-body">
+                    @* Información General *@
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h6 class="mb-0"><i class="bi bi-info-circle"></i> Información General</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <strong>Número de Orden:</strong><br />
+                                    <span class="text-muted">@ordenSeleccionada.NumeroOrden</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Estado:</strong><br />
+                                    <span class="@ordenSeleccionada.EstadoBadgeClass">
+                                        <i class="@ordenSeleccionada.EstadoIcon"></i> @ordenSeleccionada.Estado
+                                    </span>
+                                    @if (ordenSeleccionada.EstaRetrasada)
+                                    {
+                                        <br /><span class="badge bg-danger mt-1"><i class="bi bi-exclamation-triangle"></i> Retrasada</span>
+                                    }
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Proveedor:</strong><br />
+                                    <span class="text-muted">@ordenSeleccionada.ProveedorNombre</span><br />
+                                    <small class="text-secondary">NIT: @ordenSeleccionada.ProveedorNit</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Total Estimado:</strong><br />
+                                    <h4 class="text-success mb-0">$@ordenSeleccionada.TotalEstimado.ToString("N2")</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    @* Fechas *@
+                    <div class="card mb-4">
+                        <div class="card-header bg-info text-white">
+                            <h6 class="mb-0"><i class="bi bi-calendar-event"></i> Fechas</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <strong>Fecha de Creación:</strong><br />
+                                    <span class="text-muted">@ordenSeleccionada.FechaCreacion.ToString("dd/MM/yyyy HH:mm")</span>
+                                </div>
+                                <div class="col-md-3">
+                                    <strong>Fecha Prevista Entrega:</strong><br />
+                                    <span class="text-muted">@ordenSeleccionada.FechaPrevistaEntrega.ToString("dd/MM/yyyy")</span>
+                                    @if (ordenSeleccionada.DiasHastaEntrega.HasValue)
+                                    {
+                                        <br /><small class="@(ordenSeleccionada.DiasHastaEntrega < 0 ? "text-danger" : "text-success")">
+                                            @if (ordenSeleccionada.DiasHastaEntrega < 0)
+                                            {
+                                                <text>@Math.Abs(ordenSeleccionada.DiasHastaEntrega.Value) días de retraso</text>
+                                            }
+                                            else
+                                            {
+                                                <text>Faltan @ordenSeleccionada.DiasHastaEntrega días</text>
+                                            }
+                                        </small>
+                                    }
+                                </div>
+                                @if (ordenSeleccionada.FechaEnvio.HasValue)
+                                {
+                                    <div class="col-md-3">
+                                        <strong>Fecha de Envío:</strong><br />
+                                        <span class="text-muted">@ordenSeleccionada.FechaEnvio.Value.ToString("dd/MM/yyyy HH:mm")</span>
+                                    </div>
+                                }
+                                @if (ordenSeleccionada.FechaRecepcion.HasValue)
+                                {
+                                    <div class="col-md-3">
+                                        <strong>Fecha de Recepción:</strong><br />
+                                        <span class="text-muted">@ordenSeleccionada.FechaRecepcion.Value.ToString("dd/MM/yyyy HH:mm")</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    
+                    @* Productos *@
+                    <div class="card mb-4">
+                        <div class="card-header bg-success text-white">
+                            <h6 class="mb-0"><i class="bi bi-box-seam"></i> Productos (@ordenSeleccionada.Detalles.Count items)</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Medicamento</th>
+                                            <th>Fabricante</th>
+                                            <th>Presentación</th>
+                                            <th class="text-center">Cant. Solicitada</th>
+                                            @if (ordenSeleccionada.Estado == "RECIBIDA" || ordenSeleccionada.Estado == "RETRASADA")
+                                            {
+                                                <th class="text-center">Cant. Recibida</th>
+                                            }
+                                            <th class="text-end">Precio Unit.</th>
+                                            <th class="text-end">Subtotal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var detalle in ordenSeleccionada.Detalles)
+                                        {
+                                            <tr class="@(detalle.TieneDiferencia ? "table-warning" : "")">
+                                                <td>
+                                                    <strong>@detalle.MedicamentoNombre</strong>
+                                                    @if (!string.IsNullOrEmpty(detalle.LoteEsperado))
+                                                    {
+                                                        <br /><small class="text-secondary">Lote: @detalle.LoteEsperado</small>
+                                                    }
+                                                </td>
+                                                <td>@detalle.MedicamentoFabricante</td>
+                                                <td>@detalle.MedicamentoPresentacion</td>
+                                                <td class="text-center"><strong>@detalle.CantidadSolicitada</strong></td>
+                                                @if (ordenSeleccionada.Estado == "RECIBIDA" || ordenSeleccionada.Estado == "RETRASADA")
+                                                {
+                                                    <td class="text-center">
+                                                        <strong>@detalle.CantidadRecibida</strong>
+                                                        @if (detalle.TieneDiferencia)
+                                                        {
+                                                            <br /><span class="badge @(detalle.Diferencia > 0 ? "bg-info" : "bg-warning")">
+                                                                @(detalle.Diferencia > 0 ? "+" : "")@detalle.Diferencia
+                                                            </span>
+                                                        }
+                                                    </td>
+                                                }
+                                                <td class="text-end">$@detalle.PrecioUnitario.ToString("N2")</td>
+                                                <td class="text-end"><strong>$@detalle.Subtotal.ToString("N2")</strong></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                    <tfoot class="table-light">
+                                        <tr>
+                                            <td colspan="@(ordenSeleccionada.Estado == "RECIBIDA" || ordenSeleccionada.Estado == "RETRASADA" ? 6 : 5)" class="text-end">
+                                                <strong>TOTAL:</strong>
+                                            </td>
+                                            <td class="text-end">
+                                                <h5 class="mb-0 text-success">$@ordenSeleccionada.TotalEstimado.ToString("N2")</h5>
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    @* Observaciones *@
+                    @if (!string.IsNullOrEmpty(ordenSeleccionada.Observaciones))
+                    {
+                        <div class="card">
+                            <div class="card-header bg-secondary text-white">
+                                <h6 class="mb-0"><i class="bi bi-chat-left-text"></i> Observaciones</h6>
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-0" style="white-space: pre-wrap;">@ordenSeleccionada.Observaciones</p>
+                            </div>
+                        </div>
+                    }
+                    
+                    @* Auditoría *@
+                    <div class="card mt-4">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <small class="text-muted">
+                                        <i class="bi bi-person"></i> Creado por: @(ordenSeleccionada.CreatedBy ?? "Sistema")
+                                    </small>
+                                </div>
+                                @if (!string.IsNullOrEmpty(ordenSeleccionada.RecibidoBy))
+                                {
+                                    <div class="col-md-6 text-end">
+                                        <small class="text-muted">
+                                            <i class="bi bi-person-check"></i> Recibido por: @ordenSeleccionada.RecibidoBy
+                                        </small>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CerrarModalDetalle">
+                        <i class="bi bi-x-circle"></i> Cerrar
+                    </button>
+                    
+                    @if (puedeCrear)
+                    {
+                        @if (ordenSeleccionada.PuedeEnviar)
+                        {
+                            <button type="button" class="btn btn-primary" @onclick="() => ConfirmarEnviarDesdeDetalle()">
+                                <i class="bi bi-box-seam"></i> Marcar como Enviada
+                            </button>
+                        }
+                        
+                        @if (ordenSeleccionada.PuedeRecibir)
+                        {
+                            <button type="button" class="btn btn-success" @onclick="() => MostrarModalRecibirDesdeDetalle()">
+                                <i class="bi bi-check-circle"></i> Recibir Orden
+                            </button>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Modal Recibir Orden *@
+@if (mostrarModalRecibir && ordenParaRecibir != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-check-circle"></i> Recibir Orden: <strong>@ordenParaRecibir.NumeroOrden</strong>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CerrarModalRecibir"></button>
+                </div>
+                
+                <EditForm Model="@recepcionForm" OnValidSubmit="ConfirmarRecepcion">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="modal-body">
+                        @if (!string.IsNullOrEmpty(errorModalRecepcion))
+                        {
+                            <div class="alert alert-danger alert-dismissible fade show">
+                                <i class="bi bi-exclamation-triangle"></i> @errorModalRecepcion
+                                <button type="button" class="btn-close" @onclick="@(() => errorModalRecepcion = null)"></button>
+                            </div>
+                        }
+                        
+                        @if (hayDiferencias)
+                        {
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle"></i>
+                                <strong>¡Atención!</strong> Hay diferencias entre las cantidades solicitadas y recibidas.
+                                Verifique las cantidades antes de confirmar.
+                            </div>
+                        }
+                        
+                        @* Información de la orden *@
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="bi bi-info-circle"></i> Información de la Orden</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <strong>Proveedor:</strong><br />
+                                        <span class="text-muted">@ordenParaRecibir.ProveedorNombre</span>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>Fecha Prevista:</strong><br />
+                                        <span class="text-muted">@ordenParaRecibir.FechaPrevistaEntrega.ToString("dd/MM/yyyy")</span>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>Total Estimado:</strong><br />
+                                        <span class="text-muted">$@ordenParaRecibir.TotalEstimado.ToString("N2")</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        @* Tabla de productos para recepción *@
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="bi bi-box-seam"></i> Productos a Recibir</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 35%;">Medicamento</th>
+                                                <th style="width: 15%;" class="text-center">Cant. Solicitada</th>
+                                                <th style="width: 20%;" class="text-center">Cant. Recibida</th>
+                                                <th style="width: 15%;" class="text-center">Diferencia</th>
+                                                <th style="width: 15%;" class="text-center">Estado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @for (int i = 0; i < itemsRecepcion.Count; i++)
+                                            {
+                                                var index = i;
+                                                var item = itemsRecepcion[index];
+                                                var detalle = ordenParaRecibir.Detalles.FirstOrDefault(d => d.Id == item.DetalleId);
+                                                
+                                                if (detalle != null)
+                                                {
+                                                    var diferencia = item.CantidadRecibida - detalle.CantidadSolicitada;
+                                                    var tieneDiferencia = diferencia != 0;
+                                                    
+                                                    <tr class="@(tieneDiferencia ? "table-warning" : "")">
+                                                        <td>
+                                                            <strong>@detalle.MedicamentoNombre</strong><br />
+                                                            <small class="text-muted">@detalle.MedicamentoFabricante - @detalle.MedicamentoPresentacion</small>
+                                                            @if (!string.IsNullOrEmpty(detalle.LoteEsperado))
+                                                            {
+                                                                <br /><small class="text-secondary"><i class="bi bi-tag"></i> Lote: @detalle.LoteEsperado</small>
+                                                            }
+                                                        </td>
+                                                        <td class="text-center align-middle">
+                                                            <strong class="text-primary">@detalle.CantidadSolicitada</strong>
+                                                        </td>
+                                                        <td class="text-center">
+                                                            <input type="number" 
+                                                                   class="form-control form-control-sm text-center @(tieneDiferencia ? "border-warning" : "")" 
+                                                                   @bind="item.CantidadRecibida"
+                                                                   @bind:after="() => ActualizarDiferencias()"
+                                                                   min="0" />
+                                                        </td>
+                                                        <td class="text-center align-middle">
+                                                            @if (tieneDiferencia)
+                                                            {
+                                                                <span class="badge @(diferencia > 0 ? "bg-info" : "bg-danger")">
+                                                                    @(diferencia > 0 ? "+" : "")@diferencia
+                                                                </span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="badge bg-success"><i class="bi bi-check"></i> OK</span>
+                                                            }
+                                                        </td>
+                                                        <td class="text-center align-middle">
+                                                            @if (item.CantidadRecibida == detalle.CantidadSolicitada)
+                                                            {
+                                                                <i class="bi bi-check-circle-fill text-success" title="Completo"></i>
+                                                            }
+                                                            else if (item.CantidadRecibida > detalle.CantidadSolicitada)
+                                                            {
+                                                                <i class="bi bi-plus-circle-fill text-info" title="Excedente"></i>
+                                                            }
+                                                            else if (item.CantidadRecibida > 0)
+                                                            {
+                                                                <i class="bi bi-dash-circle-fill text-warning" title="Parcial"></i>
+                                                            }
+                                                            else
+                                                            {
+                                                                <i class="bi bi-x-circle-fill text-danger" title="No recibido"></i>
+                                                            }
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        @* Opciones de recepción *@
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="bi bi-gear"></i> Opciones de Recepción</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" 
+                                           id="actualizarInventario" 
+                                           @bind="recepcionForm.ActualizarInventario" />
+                                    <label class="form-check-label" for="actualizarInventario">
+                                        <strong>Actualizar inventario automáticamente</strong>
+                                        <br /><small class="text-muted">Al activar, las cantidades recibidas se sumarán al stock de medicamentos</small>
+                                    </label>
+                                </div>
+                                
+                                <div>
+                                    <label class="form-label">Observaciones de Recepción</label>
+                                    <InputTextArea class="form-control" 
+                                                  @bind-Value="recepcionForm.Observaciones" 
+                                                  rows="3" 
+                                                  placeholder="Ej: Producto recibido en buen estado, sin daños en empaque..." />
+                                    <ValidationMessage For="@(() => recepcionForm.Observaciones)" class="text-danger" />
+                                </div>
+                            </div>
+                        </div>
+                        
+                        @* Resumen de recepción *@
+                        <div class="card border-info">
+                            <div class="card-header bg-info text-white">
+                                <h6 class="mb-0"><i class="bi bi-clipboard-check"></i> Resumen de Recepción</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-4 text-center">
+                                        <h3 class="text-primary mb-0">@itemsRecepcion.Count</h3>
+                                        <small class="text-muted">Items totales</small>
+                                    </div>
+                                    <div class="col-md-4 text-center">
+                                        <h3 class="mb-0 @(hayDiferencias ? "text-warning" : "text-success")">@itemsConDiferencia</h3>
+                                        <small class="text-muted">Con diferencias</small>
+                                    </div>
+                                    <div class="col-md-4 text-center">
+                                        <h3 class="text-success mb-0">@itemsCompletos</h3>
+                                        <small class="text-muted">Completos</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CerrarModalRecibir" disabled="@guardandoRecepcion">
+                            <i class="bi bi-x-circle"></i> Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-success" disabled="@guardandoRecepcion">
+                            @if (guardandoRecepcion)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            }
+                            <i class="bi bi-check-circle"></i> Confirmar Recepción
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    // Estado
+    private List<OrdenCompraDto> ordenes = new();
+    private OrdenCompraStatsDto? stats;
+    private List<ProveedorDto> proveedoresDisponibles = new();
+    private List<MedicamentoDto> medicamentosDisponibles = new();
+    private bool cargando = true;
+    private bool puedeCrear = false;
+    
+    // Filtros
+    private string? filtroEstado;
+    private string? filtroProveedorId;
+    
+    // Modal Crear
+    private bool mostrarModalCrear = false;
+    private bool guardando = false;
+    private OrdenCompraCreateDto ordenForm = new();
+    private string? errorModal;
+    
+    // Modal Detalle
+    private bool mostrarModalDetalle = false;
+    private OrdenCompraDto? ordenSeleccionada;
+    
+    // Mensajes
+    private string? mensajeExito;
+    private string? mensajeError;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Verificar permisos
+            var userRole = await AuthService.GetUserRoleAsync();
+            puedeCrear = userRole == "admin" || userRole == "compras";
+            
+            // Cargar datos
+            await CargarProveedores();
+            await CargarMedicamentos();
+            await CargarOrdenes();
+            await CargarEstadisticas();
+        }
+        catch (Exception ex)
+        {
+            mensajeError = $"Error al cargar datos: {ex.Message}";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+    
+    private async Task CargarOrdenes()
+    {
+        try
+        {
+            cargando = true;
+            ordenes = await OrdenService.GetAllAsync(filtroEstado, filtroProveedorId);
+        }
+        catch (Exception ex)
+        {
+            mensajeError = $"Error al cargar órdenes: {ex.Message}";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+    
+    private async Task CargarEstadisticas()
+    {
+        try
+        {
+            stats = await OrdenService.GetStatsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al cargar estadísticas: {ex.Message}");
+        }
+    }
+    
+    private async Task CargarProveedores()
+    {
+        try
+        {
+            proveedoresDisponibles = await ProveedorService.GetAllAsync("ACTIVO");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al cargar proveedores: {ex.Message}");
+        }
+    }
+    
+    private async Task CargarMedicamentos()
+    {
+        try
+        {
+            medicamentosDisponibles = await MedicamentoService.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al cargar medicamentos: {ex.Message}");
+        }
+    }
+    
+    private void LimpiarFiltros()
+    {
+        filtroEstado = null;
+        filtroProveedorId = null;
+        CargarOrdenes();
+    }
+    
+    // ==================== Modal Crear ====================
+    
+    private void MostrarModalCrear()
+    {
+        ordenForm = new OrdenCompraCreateDto
+        {
+            FechaPrevistaEntrega = DateTime.Today.AddDays(7)
+        };
+        errorModal = null;
+        mostrarModalCrear = true;
+    }
+    
+    private void CerrarModalCrear()
+    {
+        mostrarModalCrear = false;
+        errorModal = null;
+    }
+    
+    private void AgregarProducto()
+    {
+        ordenForm.Detalles.Add(new DetalleOrdenCreateDto
+        {
+            CantidadSolicitada = 1,
+            PrecioUnitario = 0
+        });
+    }
+    
+    private void EliminarProducto(int index)
+    {
+        if (index >= 0 && index < ordenForm.Detalles.Count)
+        {
+            ordenForm.Detalles.RemoveAt(index);
+        }
+    }
+    
+    private void OnMedicamentoSeleccionado(DetalleOrdenCreateDto detalle)
+    {
+        if (!string.IsNullOrEmpty(detalle.MedicamentoId))
+        {
+            var medicamento = medicamentosDisponibles.FirstOrDefault(m => m.Id == detalle.MedicamentoId);
+            if (medicamento != null)
+            {
+                detalle.MedicamentoNombre = medicamento.Nombre;
+                detalle.MedicamentoFabricante = medicamento.Fabricante;
+                detalle.MedicamentoPresentacion = medicamento.Presentacion;
+                
+                // Auto-llenar precio si está disponible
+                if (medicamento.Precio > 0)
+                {
+                    detalle.PrecioUnitario = (decimal)medicamento.Precio;
+                }
+            }
+        }
+    }
+    
+    private decimal CalcularTotal()
+    {
+        return ordenForm.Detalles.Sum(d => d.Subtotal);
+    }
+    
+    private async Task GuardarOrden()
+    {
+        try
+        {
+            guardando = true;
+            errorModal = null;
+            
+            // Validaciones adicionales
+            if (string.IsNullOrEmpty(ordenForm.ProveedorId))
+            {
+                errorModal = "Debe seleccionar un proveedor";
+                return;
+            }
+            
+            if (ordenForm.FechaPrevistaEntrega < DateTime.Today)
+            {
+                errorModal = "La fecha prevista debe ser igual o posterior a hoy";
+                return;
+            }
+            
+            if (ordenForm.Detalles.Count == 0)
+            {
+                errorModal = "Debe agregar al menos un producto";
+                return;
+            }
+            
+            // Validar que todos los productos tengan medicamento seleccionado
+            if (ordenForm.Detalles.Any(d => string.IsNullOrEmpty(d.MedicamentoId)))
+            {
+                errorModal = "Todos los productos deben tener un medicamento seleccionado";
+                return;
+            }
+            
+            // Validar cantidades y precios
+            if (ordenForm.Detalles.Any(d => d.CantidadSolicitada <= 0))
+            {
+                errorModal = "Todos los productos deben tener cantidad mayor a 0";
+                return;
+            }
+            
+            if (ordenForm.Detalles.Any(d => d.PrecioUnitario <= 0))
+            {
+                errorModal = "Todos los productos deben tener precio mayor a 0";
+                return;
+            }
+            
+            // Crear orden
+            var ordenCreada = await OrdenService.CreateAsync(ordenForm);
+            
+            mensajeExito = $"Orden {ordenCreada.NumeroOrden} creada exitosamente";
+            CerrarModalCrear();
+            await CargarOrdenes();
+            await CargarEstadisticas();
+        }
+        catch (InvalidOperationException ex)
+        {
+            errorModal = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            errorModal = $"Error al crear orden: {ex.Message}";
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+    
+    // ==================== Modal Detalle ====================
+    
+    private void MostrarModalDetalle(OrdenCompraDto orden)
+    {
+        ordenSeleccionada = orden;
+        mostrarModalDetalle = true;
+    }
+    
+    private void CerrarModalDetalle()
+    {
+        mostrarModalDetalle = false;
+        ordenSeleccionada = null;
+    }
+    
+    private async Task ConfirmarEnviarDesdeDetalle()
+    {
+        if (ordenSeleccionada == null) return;
+        
+        var confirmado = await JSRuntime.InvokeAsync<bool>("confirm", 
+            $"¿Confirmar que la orden {ordenSeleccionada.NumeroOrden} ha sido enviada?");
+        
+        if (!confirmado) return;
+        
+        try
+        {
+            var dto = new MarcarEnviadaDto
+            {
+                FechaEnvio = DateTime.Now
+            };
+            
+            await OrdenService.MarcarEnviadaAsync(ordenSeleccionada.Id, dto);
+            mensajeExito = $"Orden {ordenSeleccionada.NumeroOrden} marcada como ENVIADA";
+            
+            // Cerrar modal y recargar
+            CerrarModalDetalle();
+            await CargarOrdenes();
+            await CargarEstadisticas();
+        }
+        catch (InvalidOperationException ex)
+        {
+            mensajeError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            mensajeError = $"Error: {ex.Message}";
+        }
+    }
+    
+    private void MostrarModalRecibirDesdeDetalle()
+    {
+        if (ordenSeleccionada == null) return;
+        
+        // Cerrar modal de detalle y abrir modal de recepción
+        CerrarModalDetalle();
+        MostrarModalRecibir(ordenSeleccionada);
+    }
+    
+    private async Task ConfirmarEnviar(OrdenCompraDto orden)
+    {
+        var confirmado = await JSRuntime.InvokeAsync<bool>("confirm", 
+            $"¿Confirmar que la orden {orden.NumeroOrden} ha sido enviada?");
+        
+        if (!confirmado) return;
+        
+        try
+        {
+            var dto = new MarcarEnviadaDto
+            {
+                FechaEnvio = DateTime.Now
+            };
+            
+            await OrdenService.MarcarEnviadaAsync(orden.Id, dto);
+            mensajeExito = $"Orden {orden.NumeroOrden} marcada como ENVIADA";
+            await CargarOrdenes();
+            await CargarEstadisticas();
+        }
+        catch (InvalidOperationException ex)
+        {
+            mensajeError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            mensajeError = $"Error: {ex.Message}";
+        }
+    }
+    
+    // ==================== Modal Recibir ====================
+    
+    private bool mostrarModalRecibir = false;
+    private bool guardandoRecepcion = false;
+    private OrdenCompraDto? ordenParaRecibir;
+    private RecepcionOrdenDto recepcionForm = new();
+    private List<RecepcionItemDto> itemsRecepcion = new();
+    private string? errorModalRecepcion;
+    
+    private void MostrarModalRecibir(OrdenCompraDto orden)
+    {
+        ordenParaRecibir = orden;
+        
+        // Inicializar items de recepción con las cantidades solicitadas por defecto
+        itemsRecepcion = orden.Detalles.Select(d => new RecepcionItemDto
+        {
+            DetalleId = d.Id,
+            CantidadRecibida = d.CantidadSolicitada // Por defecto, asumir que se recibe lo solicitado
+        }).ToList();
+        
+        recepcionForm = new RecepcionOrdenDto
+        {
+            Items = itemsRecepcion,
+            FechaRecepcion = DateTime.Now,
+            ActualizarInventario = true // Por defecto activado
+        };
+        
+        errorModalRecepcion = null;
+        mostrarModalRecibir = true;
+    }
+    
+    private void CerrarModalRecibir()
+    {
+        mostrarModalRecibir = false;
+        ordenParaRecibir = null;
+        itemsRecepcion.Clear();
+        errorModalRecepcion = null;
+    }
+    
+    private void ActualizarDiferencias()
+    {
+        StateHasChanged();
+    }
+    
+    private bool hayDiferencias
+    {
+        get
+        {
+            if (ordenParaRecibir == null) return false;
+            
+            return itemsRecepcion.Any(item =>
+            {
+                var detalle = ordenParaRecibir.Detalles.FirstOrDefault(d => d.Id == item.DetalleId);
+                return detalle != null && item.CantidadRecibida != detalle.CantidadSolicitada;
+            });
+        }
+    }
+    
+    private int itemsConDiferencia
+    {
+        get
+        {
+            if (ordenParaRecibir == null) return 0;
+            
+            return itemsRecepcion.Count(item =>
+            {
+                var detalle = ordenParaRecibir.Detalles.FirstOrDefault(d => d.Id == item.DetalleId);
+                return detalle != null && item.CantidadRecibida != detalle.CantidadSolicitada;
+            });
+        }
+    }
+    
+    private int itemsCompletos
+    {
+        get
+        {
+            if (ordenParaRecibir == null) return 0;
+            
+            return itemsRecepcion.Count(item =>
+            {
+                var detalle = ordenParaRecibir.Detalles.FirstOrDefault(d => d.Id == item.DetalleId);
+                return detalle != null && item.CantidadRecibida == detalle.CantidadSolicitada;
+            });
+        }
+    }
+    
+    private async Task ConfirmarRecepcion()
+    {
+        if (ordenParaRecibir == null) return;
+        
+        try
+        {
+            guardandoRecepcion = true;
+            errorModalRecepcion = null;
+            
+            // Validar que haya al menos un item con cantidad > 0
+            if (!itemsRecepcion.Any(i => i.CantidadRecibida > 0))
+            {
+                errorModalRecepcion = "Debe recibir al menos un producto con cantidad mayor a 0";
+                return;
+            }
+            
+            // Si hay diferencias, pedir confirmación adicional
+            if (hayDiferencias)
+            {
+                var mensaje = $"Hay {itemsConDiferencia} producto(s) con diferencias entre lo solicitado y lo recibido.\n\n¿Está seguro de continuar con la recepción?";
+                var confirmado = await JSRuntime.InvokeAsync<bool>("confirm", mensaje);
+                
+                if (!confirmado)
+                {
+                    guardandoRecepcion = false;
+                    return;
+                }
+            }
+            
+            // Actualizar los items del form
+            recepcionForm.Items = itemsRecepcion;
+            
+            // Llamar al servicio
+            var response = await OrdenService.RecibirOrdenAsync(ordenParaRecibir.Id, recepcionForm);
+            
+            // Mensaje de éxito
+            mensajeExito = response.Mensaje;
+            
+            if (response.ItemsConDiferencias.Count > 0)
+            {
+                mensajeExito += $" Se detectaron {response.ItemsConDiferencias.Count} diferencia(s).";
+            }
+            
+            // Cerrar modal y recargar
+            CerrarModalRecibir();
+            await CargarOrdenes();
+            await CargarEstadisticas();
+        }
+        catch (InvalidOperationException ex)
+        {
+            errorModalRecepcion = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            errorModalRecepcion = $"Error al recibir orden: {ex.Message}";
+        }
+        finally
+        {
+            guardandoRecepcion = false;
+        }
+    }
+}

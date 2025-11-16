@@ -6,7 +6,7 @@ import os
 import uvicorn
 from database.connection import engine, Base, get_db
 
-from routes import medicamentos, auth, users, alertas
+from routes import medicamentos, auth, users, alertas, proveedores, ordenes
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
@@ -29,6 +29,8 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(medicamentos.router, prefix="/api/medicamentos", tags=["medicamentos"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(alertas.router, prefix="/api/alertas", tags=["alertas"])
+app.include_router(proveedores.router, prefix="/api/proveedores", tags=["proveedores"])
+app.include_router(ordenes.router, prefix="/api/ordenes", tags=["ordenes"])
 
 
 @app.get("/")
@@ -68,6 +70,13 @@ async def lifespan(app: FastAPI):
         alert_monitor.start()
     except Exception as e:
         print(f"Error iniciando alert monitor: {e}")
+    
+    # Iniciar monitor de órdenes de compra (HU-4.02)
+    try:
+        from jobs.orden_monitor import orden_monitor
+        orden_monitor.start()
+    except Exception as e:
+        print(f"Error iniciando orden monitor: {e}")
     
     #print("="*60 + "\n")
     
@@ -109,6 +118,11 @@ async def lifespan(app: FastAPI):
     print("\nDeteniendo servicios...")
     try:
         alert_monitor.stop()
+    except:
+        pass
+    try:
+        from jobs.orden_monitor import orden_monitor
+        orden_monitor.stop()
     except:
         pass
 
