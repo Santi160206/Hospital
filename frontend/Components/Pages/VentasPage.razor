@@ -5,19 +5,28 @@
 @inject IAuthService AuthService
 @inject NavigationManager NavigationManager
 
-<PageTitle>Ventas</PageTitle>
+<PageTitle>Dashboard de Ventas</PageTitle>
 
-<h1>Ventas</h1>
+<h3 class="mb-4">Resumen General</h3>
 
-<p role="status">Current count: @currentCount</p>
+<div class="grid grid-cols-4 gap-4">
+    <Card><CardContent><h4>@TotalVentas</h4><p>Ventas del Mes</p></CardContent></Card>
+    <Card><CardContent><h4>@TotalUnidades</h4><p>Medicamentos Vendidos</p></CardContent></Card>
+    <Card><CardContent><h4>@StockCritico</h4><p>Stock Crítico</p></CardContent></Card>
+    <Card><CardContent><h4>@IngresosTotales</h4><p>Ingresos</p></CardContent></Card>
+</div>
 
-<button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+<div class="mt-6 grid grid-cols-2 gap-6">
+    <Card><CardContent><VentasMensualesChart /></CardContent></Card>
+    <Card><CardContent><MedicamentosMasVendidosChart /></CardContent></Card>
+</div>
 
-@code {
-    private int currentCount = 0;
-
-    private void IncrementCount()
+@code{
+    protected override async Task OnInitializedAsync()
     {
-        currentCount++;
+        var resumen = await Http.GetFromJsonAsync<ResumenVentas>("api/dashboard/ventas/resumen");
+        TotalVentas = resumen.TotalVentas;
+        TotalUnidadesVendidas = resumen.TotalUnidadesVendidas;
+        StockCritico = resumen.StockCritico;
     }
 }
