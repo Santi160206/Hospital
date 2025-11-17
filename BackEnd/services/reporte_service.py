@@ -199,12 +199,13 @@ class ReporteService:
             Dict con estructura de ReporteComprasResponse
         """
         try:
-            # Query: Detalles de órdenes RECIBIDAS
+            # Query: Detalles de órdenes RECIBIDAS con orden_id
             query = self.db.query(
                 DetalleOrdenCompra.medicamento_id,
                 Medicamento.nombre.label('medicamento_nombre'),
                 Medicamento.fabricante.label('medicamento_fabricante'),
                 Medicamento.presentacion.label('medicamento_presentacion'),
+                OrdenCompra.id.label('orden_id'),  # Agregar orden_id
                 OrdenCompra.proveedor_id,
                 Proveedor.nombre.label('proveedor_nombre'),
                 Proveedor.nit.label('proveedor_nit'),
@@ -232,12 +233,13 @@ class ReporteService:
             if medicamento_id:
                 query = query.filter(DetalleOrdenCompra.medicamento_id == medicamento_id)
             
-            # Agrupar
+            # Agrupar (incluir orden_id)
             query = query.group_by(
                 DetalleOrdenCompra.medicamento_id,
                 Medicamento.nombre,
                 Medicamento.fabricante,
                 Medicamento.presentacion,
+                OrdenCompra.id,  # Agregar orden_id al group by
                 OrdenCompra.proveedor_id,
                 Proveedor.nombre,
                 Proveedor.nit
@@ -265,7 +267,7 @@ class ReporteService:
             proveedores_dict = defaultdict(lambda: {
                 'proveedor_nombre': '',
                 'proveedor_nit': '',
-                'total_ordenes': set(),
+                'ordenes_ids': set(),  # Usamos set para IDs únicos, luego convertimos a int
                 'total_items': 0,
                 'total_invertido': Decimal('0')
             })
@@ -280,8 +282,9 @@ class ReporteService:
                 
                 prov_id = str(row.proveedor_id)
                 med_id = str(row.medicamento_id)
+                orden_id = str(row.orden_id)
                 
-                # Detalle individual
+                #detalle individual
                 detalles.append({
                     'medicamento_id': med_id,
                     'medicamento_nombre': row.medicamento_nombre,
@@ -296,36 +299,38 @@ class ReporteService:
                     'precio_promedio': float(precio_promedio)
                 })
                 
-                # Acumular por proveedor
+                #acumular por proveedor
                 if not proveedores_dict[prov_id]['proveedor_nombre']:
                     proveedores_dict[prov_id]['proveedor_nombre'] = row.proveedor_nombre
                     proveedores_dict[prov_id]['proveedor_nit'] = row.proveedor_nit
                 
+                #agregar orden_id al set para contar ordenes unicas
+                proveedores_dict[prov_id]['ordenes_ids'].add(orden_id)
                 proveedores_dict[prov_id]['total_items'] += total_unidades
                 proveedores_dict[prov_id]['total_invertido'] += total_dinero
                 
                 gran_total += total_dinero
                 medicamentos_set.add(med_id)
             
-            # Totales por proveedor
+            #totales por proveedor
             totales_por_proveedor = []
             for prov_id, prov_data in proveedores_dict.items():
                 totales_por_proveedor.append({
                     'proveedor_id': prov_id,
                     'proveedor_nombre': prov_data['proveedor_nombre'],
                     'proveedor_nit': prov_data['proveedor_nit'],
-                    'total_ordenes': prov_data['total_ordenes'],
+                    'total_ordenes': len(prov_data['ordenes_ids']),  #convertir set a int
                     'total_items': prov_data['total_items'],
                     'total_invertido': float(prov_data['total_invertido'])
                 })
             
-            # Ordenar detalles por medicamento
+            #ordenar detalles por medicamento
             detalles.sort(key=lambda x: x['medicamento_nombre'])
             
-            # Ordenar totales por proveedor
+            #ordenar totales por proveedor
             totales_por_proveedor.sort(key=lambda x: x['proveedor_nombre'])
             
-            # Contar órdenes únicas
+            #contar ordenes unicas
             query_ordenes = self.db.query(func.count(OrdenCompra.id.distinct())).filter(
                 and_(
                     OrdenCompra.estado == EstadoOrdenEnum.RECIBIDA,

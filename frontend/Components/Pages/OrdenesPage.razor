@@ -165,23 +165,23 @@
                             @foreach (var orden in ordenes)
                             {
                                 <tr class="@(orden.EstaRetrasada ? "table-danger" : "")">
-                                    <td><strong>@orden.NumeroOrden</strong></td>
-                                    <td>@orden.ProveedorNombre</td>
-                                    <td>
+                                    <td style="text-align: center;"><strong>@orden.NumeroOrden</strong></td>
+                                    <td style="text-align: center;">@orden.ProveedorNombre</td>
+                                    <td style="text-align: center;">
                                         @orden.FechaPrevistaEntrega.ToString("dd/MM/yyyy")
                                         @if (orden.EstaRetrasada)
                                         {
                                             <br /><small class="text-danger"><i class="bi bi-exclamation-triangle"></i> Retrasada</small>
                                         }
                                     </td>
-                                    <td>
+                                    <td style="text-align: center;">
                                         <span class="@orden.EstadoBadgeClass">
                                             <i class="@orden.EstadoIcon"></i> @orden.Estado
                                         </span>
                                     </td>
-                                    <td>$@orden.TotalEstimado.ToString("N2")</td>
-                                    <td>@orden.Detalles.Count</td>
-                                    <td>@orden.FechaCreacion.ToString("dd/MM/yyyy")</td>
+                                    <td style="text-align: center;">$@orden.TotalEstimado.ToString("N2")</td>
+                                    <td style="text-align: center;">@orden.Detalles.Count</td>
+                                    <td style="text-align: center;">@orden.FechaCreacion.ToString("dd/MM/yyyy")</td>
                                     <td class="text-center">
                                         <div class="btn-group btn-group-sm" role="group">
                                             <button class="btn btn-outline-info" @onclick="() => MostrarModalDetalle(orden)" title="Ver detalle">
