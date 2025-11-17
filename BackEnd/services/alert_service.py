@@ -2,6 +2,9 @@
 Servicio para gestión de alertas automatizadas.
 HU-2.01: Alertas de stock bajo
 HU-2.02: Alertas de vencimiento
+
+REFACTORIZADO: Ahora utiliza el patrón Factory para creación de alertas.
+Los factories encapsulan la lógica de construcción específica de cada tipo.
 """
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
@@ -11,9 +14,9 @@ from database.models import (
 )
 from database.redis_client import redis_client
 from observers.alert_observer import alert_subject
+from factories.alert_factory import AlertFactoryRegistry
 from typing import List, Optional, Dict, Any
 from datetime import date, datetime, timedelta
-from uuid import uuid4
 
 
 class AlertService:
@@ -22,7 +25,7 @@ class AlertService:
     
     Responsabilidades:
     - Detectar condiciones de alerta (stock bajo, vencimientos)
-    - Crear alertas en base de datos
+    - Crear alertas en base de datos (usando Factories)
     - Notificar a observadores (patrón Observer)
     - Gestionar estados de alertas
     - Prevenir duplicados
@@ -248,8 +251,10 @@ class AlertService:
         priority: PrioridadAlertaEnum
     ) -> str:
         """
-        Crea o actualiza una alerta de stock.
+        Crea o actualiza una alerta de stock usando Factory.
         HU-2.01: No duplicar alertas, escalar si empeora.
+        
+        REFACTORIZADO: Usa StockAlertFactory para construcción.
         
         Returns:
             'created', 'updated', o 'unchanged'
@@ -267,13 +272,14 @@ class AlertService:
             )
         ).first()
         
-        # Generar mensaje
-        mensaje = self._generate_stock_message(medicamento, alert_type)
-        
         if existing:
             # Ya existe alerta activa
             # Actualizar si el tipo o prioridad cambió (escalamiento)
             if existing.tipo != alert_type or existing.prioridad != priority:
+                # Usar factory para regenerar mensaje actualizado
+                factory = AlertFactoryRegistry.get_factory('stock')
+                mensaje = factory.generate_message(medicamento, alert_type)
+                
                 existing.tipo = alert_type
                 existing.prioridad = priority
                 existing.mensaje = mensaje
@@ -289,17 +295,9 @@ class AlertService:
             else:
                 return 'unchanged'
         else:
-            # Crear nueva alerta
-            alerta = Alerta(
-                id=str(uuid4()),
-                medicamento_id=medicamento.id,
-                tipo=alert_type,
-                estado=EstadoAlertaEnum.ACTIVA,
-                prioridad=priority,
-                mensaje=mensaje,
-                stock_actual=medicamento.stock,
-                stock_minimo=medicamento.minimo_stock
-            )
+            # ✨ FACTORY: Delegar construcción completa al factory
+            factory = AlertFactoryRegistry.get_factory('stock')
+            alerta = factory.create_alert(medicamento=medicamento)
             
             self.db.add(alerta)
             self.db.commit()
@@ -318,8 +316,10 @@ class AlertService:
         dias_restantes: int
     ) -> str:
         """
-        Crea o actualiza una alerta de vencimiento.
+        Crea o actualiza una alerta de vencimiento usando Factory.
         HU-2.02: No duplicar alertas para mismo lote.
+        
+        REFACTORIZADO: Usa ExpirationAlertFactory para construcción.
         
         Returns:
             'created', 'updated', o 'unchanged'
@@ -337,12 +337,13 @@ class AlertService:
             )
         ).first()
         
-        # Generar mensaje
-        mensaje = self._generate_expiration_message(medicamento, alert_type, dias_restantes)
-        
         if existing:
             # Actualizar si cambió el tipo o prioridad
             if existing.tipo != alert_type or existing.prioridad != priority:
+                # Usar factory para regenerar mensaje actualizado
+                factory = AlertFactoryRegistry.get_factory('expiration')
+                mensaje = factory.generate_message(medicamento, alert_type, dias_restantes)
+                
                 existing.tipo = alert_type
                 existing.prioridad = priority
                 existing.mensaje = mensaje
@@ -358,17 +359,11 @@ class AlertService:
             else:
                 return 'unchanged'
         else:
-            # Crear nueva alerta
-            alerta = Alerta(
-                id=str(uuid4()),
-                medicamento_id=medicamento.id,
-                tipo=alert_type,
-                estado=EstadoAlertaEnum.ACTIVA,
-                prioridad=priority,
-                mensaje=mensaje,
-                fecha_vencimiento=medicamento.fecha_vencimiento,
-                dias_restantes=dias_restantes,
-                lote=medicamento.lote
+            # FACTORY: Delegar construcción completa al factory
+            factory = AlertFactoryRegistry.get_factory('expiration')
+            alerta = factory.create_alert(
+                medicamento=medicamento,
+                dias_restantes=dias_restantes
             )
             
             self.db.add(alerta)
@@ -509,14 +504,13 @@ class AlertService:
     
     #UTILIDADES
     
+    # DEPRECADO: Métodos movidos a los factories
+    # Mantenidos temporalmente por compatibilidad, pero ya no se usan internamente
+    
     def _generate_stock_message(self, med: Medicamento, alert_type: TipoAlertaEnum) -> str:
-        """Genera mensaje descriptivo para alerta de stock."""
-        if alert_type == TipoAlertaEnum.STOCK_AGOTADO:
-            return f"Stock agotado: {med.nombre} ({med.presentacion})"
-        elif alert_type == TipoAlertaEnum.STOCK_CRITICO:
-            return f"Stock crítico: {med.nombre} tiene {med.stock} unidades (mínimo: {med.minimo_stock})"
-        else:  # STOCK_MINIMO
-            return f"Stock mínimo alcanzado: {med.nombre} tiene {med.stock} unidades (mínimo: {med.minimo_stock})"
+        """Usa StockAlertFactory.generate_message() en su lugar."""
+        factory = AlertFactoryRegistry.get_factory('stock')
+        return factory.generate_message(med, alert_type)
     
     def _generate_expiration_message(
         self, 
@@ -524,13 +518,9 @@ class AlertService:
         alert_type: TipoAlertaEnum,
         dias_restantes: int
     ) -> str:
-        """Genera mensaje descriptivo para alerta de vencimiento."""
-        if alert_type == TipoAlertaEnum.VENCIDO:
-            return f"VENCIDO: {med.nombre} (lote {med.lote}) venció hace {abs(dias_restantes)} días"
-        elif alert_type == TipoAlertaEnum.VENCIMIENTO_INMEDIATO:
-            return f"Vencimiento inmediato: {med.nombre} (lote {med.lote}) vence en {dias_restantes} días"
-        else:  # VENCIMIENTO_PROXIMO
-            return f"Vencimiento próximo: {med.nombre} (lote {med.lote}) vence en {dias_restantes} días"
+        """Usa ExpirationAlertFactory.generate_message() en su lugar."""
+        factory = AlertFactoryRegistry.get_factory('expiration')
+        return factory.generate_message(med, alert_type, dias_restantes)
     
     def _notify_alert_event(self, alerta: Alerta, event_type: str):
         """

@@ -1,6 +1,8 @@
 """
 Service para lógica de negocio de Órdenes de Compra.
 HU-4.02: Post-Orden
+
+REFACTORIZADO: Ahora utiliza OrdenRetrasadaAlertFactory para creación de alertas.
 """
 from sqlalchemy.orm import Session, joinedload
 from database.models import (
@@ -10,6 +12,7 @@ from database.models import (
 )
 from repositories.orden_compra_repo import OrdenCompraRepository, DetalleOrdenRepository
 from repositories.proveedor_repo import ProveedorRepository
+from factories.alert_factory import AlertFactoryRegistry
 from typing import Optional, Dict, Any, List
 from datetime import datetime, date
 from decimal import Decimal
@@ -26,6 +29,7 @@ class OrdenCompraService:
     - Cálculo de totales
     - Actualización de inventario al recibir
     - Auditoría completa
+    - Creación de alertas (usando Factory pattern)
     """
     
     def __init__(self, db: Session):
@@ -36,7 +40,9 @@ class OrdenCompraService:
     
     def _crear_alerta_orden_retrasada(self, orden: OrdenCompra, dias_retraso: int) -> None:
         """
-        Crea una alerta de orden retrasada y notifica a los roles correspondientes.
+        Crea una alerta de orden retrasada usando Factory y notifica a observadores.
+        
+        REFACTORIZADO: Usa OrdenRetrasadaAlertFactory para construcción.
         
         Esta función se llama cuando:
         1. Una orden pasa de ENVIADA a RETRASADA (cambio de estado)
@@ -46,8 +52,7 @@ class OrdenCompraService:
             orden: La orden retrasada
             dias_retraso: Cantidad de días de retraso
         """
-        from database.models import Alerta, TipoAlertaEnum, EstadoAlertaEnum, PrioridadAlertaEnum
-        from uuid import uuid4
+        from database.models import Alerta, TipoAlertaEnum, EstadoAlertaEnum
         from observers.alert_observer import alert_subject
         
         # Verificar si ya existe alerta activa para esta orden
@@ -58,56 +63,31 @@ class OrdenCompraService:
         ).first()
         
         if alerta_existente:
-            print(f"alerta ya existe para orden {orden.numero_orden}")
+            print(f"⚠️  Alerta ya existe para orden {orden.numero_orden}")
             return
         
-        # Determinar prioridad según días de retraso
-        if dias_retraso >= 7:
-            prioridad = PrioridadAlertaEnum.CRITICA
-        elif dias_retraso >= 3:
-            prioridad = PrioridadAlertaEnum.ALTA
-        else:
-            prioridad = PrioridadAlertaEnum.MEDIA
-        
-        mensaje = f"Orden {orden.numero_orden} retrasada {dias_retraso} día{'s' if dias_retraso > 1 else ''}. Proveedor: {orden.proveedor.nombre}"
-        
-        alerta = Alerta(
-            id=str(uuid4()),
-            medicamento_id=None,  # No asociada a medicamento específico
-            tipo=TipoAlertaEnum.ORDEN_RETRASADA,
-            estado=EstadoAlertaEnum.ACTIVA,
-            prioridad=prioridad,
-            mensaje=mensaje,
-            metadatos={
-                'orden_id': str(orden.id),
-                'numero_orden': orden.numero_orden,
-                'proveedor_id': str(orden.proveedor_id),
-                'proveedor_nombre': orden.proveedor.nombre,
-                'proveedor_nit': orden.proveedor.nit,
-                'fecha_prevista': str(orden.fecha_prevista_entrega),
-                'dias_retraso': dias_retraso,
-                'total_estimado': float(orden.total_estimado)
-            }
-        )
+        # ✨ FACTORY: Delegar construcción completa al factory
+        factory = AlertFactoryRegistry.get_factory('orden_retrasada')
+        alerta = factory.create_alert(orden=orden, dias_retraso=dias_retraso)
         
         self.db.add(alerta)
         self.db.flush()
         self.db.refresh(alerta)
         
-        print(f"🔔 Alerta creada: {mensaje}")
+        print(f"🔔 Alerta creada: {alerta.mensaje}")
         
         # Notificar a observadores (envía a Redis para roles COMPRAS y ADMIN)
         alert_event = {
             'event_type': 'created',
             'alert_id': str(alerta.id),
             'alert_type': TipoAlertaEnum.ORDEN_RETRASADA.value,
-            'priority': prioridad.value,
+            'priority': alerta.prioridad.value,
             'medicamento_id': None,
             'medicamento_nombre': f"Orden {orden.numero_orden}",
             'medicamento_fabricante': orden.proveedor.nombre,
             'medicamento_presentacion': f"{dias_retraso} días de retraso",
             'medicamento_lote': '',
-            'mensaje': mensaje,
+            'mensaje': alerta.mensaje,
             'metadata': alerta.metadatos
         }
         
@@ -141,7 +121,7 @@ class OrdenCompraService:
             self.db.add(alerta)
             self.db.flush()
             
-            print(f"alerta resuelta para orden {alerta.metadatos.get('numero_orden')}")
+            print(f"✅ Alerta resuelta para orden {alerta.metadatos.get('numero_orden')}")
             
             # Notificar resolución
             alert_event = {
@@ -457,7 +437,7 @@ class OrdenCompraService:
             if orden.fecha_prevista_entrega < date.today():
                 dias_retraso = (date.today() - orden.fecha_prevista_entrega).days
                 orden.estado = EstadoOrdenEnum.RETRASADA
-                print(f"orden {orden.numero_orden} marcada como RETRASADA ({dias_retraso} días)")
+                print(f"⚠️  Orden {orden.numero_orden} marcada como RETRASADA ({dias_retraso} días)")
                 
                 # Crear alerta inmediatamente
                 self._crear_alerta_orden_retrasada(orden, dias_retraso)
@@ -654,9 +634,7 @@ class OrdenCompraService:
         NUEVO: Ahora también crea alertas y notifica a roles correspondientes.
         """
         try:
-            from database.models import Alerta, TipoAlertaEnum, EstadoAlertaEnum, PrioridadAlertaEnum
-            from uuid import uuid4
-            from observers.alert_observer import alert_subject
+            from database.models import Alerta, TipoAlertaEnum, EstadoAlertaEnum
             
             ordenes_retrasadas = self.repo.list_retrasadas()
             count = 0
@@ -684,8 +662,7 @@ class OrdenCompraService:
                 self.db.add(audit)
                 count += 1
                 
-                # NUEVO: Verificar si ya existe alerta activa para esta orden
-                # Buscar en metadatos JSON usando el campo orden_id
+                # Verificar si ya existe alerta activa para esta orden
                 alerta_existente = self.db.query(Alerta).filter(
                     Alerta.estado == EstadoAlertaEnum.ACTIVA,
                     Alerta.tipo == TipoAlertaEnum.ORDEN_RETRASADA,
@@ -693,7 +670,7 @@ class OrdenCompraService:
                 ).first()
                 
                 if not alerta_existente:
-                    # Usar el método centralizado para crear alertas
+                    # Usar Factory para crear alerta
                     self._crear_alerta_orden_retrasada(orden, dias_retraso)
                     alertas_creadas += 1
             
