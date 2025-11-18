@@ -9,7 +9,7 @@
 
 <h3 class="mb-4">Resumen General</h3>
 
-<div class="grid grid-cols-4 gap-4">
+@*<div class="grid grid-cols-4 gap-4">
     <Card><CardContent><h4>@TotalVentas</h4><p>Ventas del Mes</p></CardContent></Card>
     <Card><CardContent><h4>@TotalUnidades</h4><p>Medicamentos Vendidos</p></CardContent></Card>
     <Card><CardContent><h4>@StockCritico</h4><p>Stock Crítico</p></CardContent></Card>
@@ -22,11 +22,27 @@
 </div>
 
 @code{
+    private int TotalVentas { get; set; }
+    private int TotalUnidadesVendidas { get; set; }
+    private int StockCritico { get; set; }
     protected override async Task OnInitializedAsync()
     {
         var resumen = await Http.GetFromJsonAsync<ResumenVentas>("api/dashboard/ventas/resumen");
         TotalVentas = resumen.TotalVentas;
         TotalUnidadesVendidas = resumen.TotalUnidadesVendidas;
         StockCritico = resumen.StockCritico;
+    }
+}*@
+
+<p role="status">Current count: @currentCount</p>
+
+<button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+
+@code {
+    private int currentCount = 0;
+
+    private void IncrementCount()
+    {
+        currentCount++;
     }
 }

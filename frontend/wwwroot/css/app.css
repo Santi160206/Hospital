@@ -16,6 +16,15 @@ html, body {
   --color-text-secondary: #666666;
   --color-text-invert: #FFFFFF;
 }
+body {
+    background-image: url('/LoginBG.jpg');
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center;
+    margin: 0;
+    padding: 0;
+}
+
 
 /* ================== BARRA DE NAVEGACIÓN ===================== */
 .navbar-custom {
@@ -179,6 +188,25 @@ html, body {
   font-weight: 700;
   color: var(--color-primary-dark);
 }
+
+/* ================================= LOGIN PAGE ============================ */
+.login-background {
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+
+.login-card {
+    background: rgba(255, 255, 255, 0.85); /* tarjeta transparente */
+    padding: 40px;
+    width: 420px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    backdrop-filter: blur(6px); /* efecto vidrio (glassmorphism) */
+}
+
 
 /* ===================== CARDS ========================== */
 /* Contenedor de la tarjeta */
