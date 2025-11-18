@@ -1,0 +1,336 @@
+@page "/reportes-ventas"
+@using FrontEndBlazor.Models
+@using FrontEndBlazor.Services
+@inject IVentaService VentaService
+@inject IAuthService AuthService
+@inject IJSRuntime JS
+
+<PageTitle>Reportes de Ventas</PageTitle>
+
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="title-style">📊 Reportes y Análisis de Ventas</h2>
+            <p class="text-muted">Análisis de ventas históricas y proyecciones de demanda</p>
+        </div>
+        <div>
+            <button class="btn btn-outline-secondary" @onclick="NavigateToVentas">
+                💰 Volver a Ventas
+            </button>
+        </div>
+    </div>
+
+    <!-- Filtros Reporte -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">📈 Reporte por Período</h5>
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Fecha Inicio</label>
+                    <input type="date" class="form-control" @bind="reporteModel.FechaInicio" @bind:format="yyyy-MM-dd" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Fecha Fin</label>
+                    <input type="date" class="form-control" @bind="reporteModel.FechaFin" @bind:format="yyyy-MM-dd" />
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-primary w-100" @onclick="GenerarReporte" disabled="@generandoReporte">
+                        @if (generandoReporte)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        📊 Generar Reporte
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-success w-100" @onclick="GenerarProyeccion" disabled="@generandoProyeccion">
+                        @if (generandoProyeccion)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        🔮 Proyección 30 Días
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alertas -->
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            ❌ @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = string.Empty"></button>
+        </div>
+    }
+
+    <!-- Reporte Generado -->
+    @if (reporteGenerado != null)
+    {
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">📋 Resumen del Período: @reporteGenerado.Periodo</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h3 class="text-success">@reporteGenerado.TotalVentasFormateado</h3>
+                                <p class="mb-0">Total Ventas</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h3 class="text-primary">@reporteGenerado.CantidadVentas</h3>
+                                <p class="mb-0">Ventas Realizadas</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h3 class="text-info">@reporteGenerado.VentasPromedioFormateado</h3>
+                                <p class="mb-0">Venta Promedio</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h3 class="text-warning">@reporteGenerado.ProductosMasVendidos.Count</h3>
+                                <p class="mb-0">Productos Vendidos</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Productos Más Vendidos -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">🏆 Productos Más Vendidos</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th>Cantidad Vendida</th>
+                                <th>Total Ventas</th>
+                                <th>% del Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var producto in reporteGenerado.ProductosMasVendidos)
+                            {
+                                var porcentaje = reporteGenerado.TotalVentas > 0 ? 
+                                    (producto.TotalVentas / reporteGenerado.TotalVentas) * 100 : 0;
+                                
+                                <tr>
+                                    <td>
+                                        <strong>@producto.MedicamentoNombre</strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-primary">@producto.CantidadVendida unidades</span>
+                                    </td>
+                                    <td>
+                                        <strong class="text-success">@producto.TotalVentasFormateado</strong>
+                                    </td>
+                                    <td>
+                                        <div class="progress" style="height: 20px;">
+                                            <div class="progress-bar" role="progressbar" 
+                                                 style="width: @(porcentaje)%"
+                                                 aria-valuenow="@porcentaje" aria-valuemin="0" aria-valuemax="100">
+                                                @porcentaje.ToString("F1")%
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ventas por Día -->
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">📅 Ventas por Día</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Ventas Realizadas</th>
+                                <th>Total del Día</th>
+                                <th>Tendencia</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var ventaDia in reporteGenerado.VentasPorDia.OrderBy(v => v.FechaDateTime))
+                            {
+                                <tr>
+                                    <td>@ventaDia.FechaCorta</td>
+                                    <td>
+                                        <span class="badge bg-secondary">@ventaDia.CantidadVentas ventas</span>
+                                    </td>
+                                    <td>
+                                        <strong>@ventaDia.TotalVentasFormateado</strong>
+                                    </td>
+                                    <td>
+                                        @if (ventaDia.TotalVentas > reporteGenerado.VentasPromedio)
+                                        {
+                                            <span class="badge bg-success">↑ Por encima del promedio</span>
+                                        }
+                                        else if (ventaDia.TotalVentas < reporteGenerado.VentasPromedio)
+                                        {
+                                            <span class="badge bg-warning">↓ Por debajo del promedio</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-info">➡ En el promedio</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Proyección de Demanda -->
+    @if (proyeccionGenerada != null)
+    {
+        <div class="card mt-4">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">🔮 Proyección de Demanda - @proyeccionGenerada.PeriodoAnalizado</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <strong>📊 Método de Proyección:</strong> Basado en el promedio de ventas de los últimos 90 días.<br />
+                    <strong>📈 Nivel de Reorden:</strong> Demanda proyectada + 20% para seguridad de stock.
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Medicamento</th>
+                                <th>Ventas (90 días)</th>
+                                <th>Promedio Diario</th>
+                                <th>Demanda Proyectada</th>
+                                <th>Stock Recomendado</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var proyeccion in proyeccionGenerada.Proyecciones.OrderByDescending(p => p.DemandaProyectada30Dias))
+                            {
+                                <tr>
+                                    <td>
+                                        <strong>@proyeccion.MedicamentoNombre</strong>
+                                    </td>
+                                    <td>@proyeccion.VentasUltimos90Dias unidades</td>
+                                    <td>@proyeccion.PromedioDiario.ToString("F2")/día</td>
+                                    <td>
+                                        <span class="badge bg-primary">@proyeccion.DemandaProyectada30Dias unidades</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-success">@proyeccion.NivelReordenRecomendado unidades</span>
+                                    </td>
+                                    <td>
+                                        @if (proyeccion.DemandaProyectada30Dias > 50)
+                                        {
+                                            <span class="badge bg-danger">Alta demanda</span>
+                                        }
+                                        else if (proyeccion.DemandaProyectada30Dias > 20)
+                                        {
+                                            <span class="badge bg-warning">Demanda media</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-info">Demanda baja</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private ReporteCompletoDto? reporteGenerado;
+    private ProyeccionDemandaDto? proyeccionGenerada;
+    private bool generandoReporte = false;
+    private bool generandoProyeccion = false;
+    private string errorMessage = string.Empty;
+
+    private ReporteVentaPeriodoDto reporteModel = new()
+    {
+        FechaInicio = DateTime.Today.AddDays(-30),
+        FechaFin = DateTime.Today
+    };
+
+    private async Task GenerarReporte()
+    {
+        try
+        {
+            generandoReporte = true;
+            errorMessage = string.Empty;
+            proyeccionGenerada = null;
+
+            reporteGenerado = await VentaService.GenerarReporteVentasAsync(
+                reporteModel.FechaInicio, 
+                reporteModel.FechaFin
+            );
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al generar reporte: {ex.Message}";
+        }
+        finally
+        {
+            generandoReporte = false;
+        }
+    }
+
+    private async Task GenerarProyeccion()
+    {
+        try
+        {
+            generandoProyeccion = true;
+            errorMessage = string.Empty;
+            reporteGenerado = null;
+
+            proyeccionGenerada = await VentaService.GenerarProyeccionDemandaAsync(30);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al generar proyección: {ex.Message}";
+        }
+        finally
+        {
+            generandoProyeccion = false;
+        }
+    }
+
+    private void NavigateToVentas()
+    {
+        NavigationManager.NavigateTo("/ventas");
+    }
+}

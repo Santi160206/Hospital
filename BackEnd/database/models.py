@@ -128,3 +128,31 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
 
+class Venta(Base):
+    __tablename__ = 'ventas'
+
+    id = Column(GUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    usuario_id = Column(GUID(), ForeignKey('users.id'), nullable=False)
+    total = Column(Numeric(12, 2), nullable=False)
+    fecha = Column(DateTime, server_default=func.now())
+    cliente = Column(String(200), nullable=True)  # Opcional para ventas sin receta
+    notas = Column(String(500), nullable=True)
+    
+    # Relaciones
+    usuario = relationship('User', backref='ventas')
+    detalles = relationship('DetalleVenta', back_populates='venta', cascade='all, delete-orphan')
+
+
+class DetalleVenta(Base):
+    __tablename__ = 'detalles_venta'
+
+    id = Column(GUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    venta_id = Column(GUID(), ForeignKey('ventas.id'), nullable=False)
+    medicamento_id = Column(GUID(), ForeignKey('medicamentos.id'), nullable=False)
+    cantidad = Column(Integer, nullable=False)
+    precio_unitario = Column(Numeric(12, 2), nullable=False)
+    subtotal = Column(Numeric(12, 2), nullable=False)
+    
+    # Relaciones
+    venta = relationship('Venta', back_populates='detalles')
+    medicamento = relationship('Medicamento')
