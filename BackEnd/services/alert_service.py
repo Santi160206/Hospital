@@ -205,7 +205,7 @@ class AlertService:
         
         HU-2.01 criterios:
         - stock = 0 -> STOCK_AGOTADO / CRITICA
-        - stock < minimo/2 -> STOCK_CRITICO / ALTA
+        - stock < minimo -> STOCK_CRITICO / ALTA
         - stock == minimo -> STOCK_MINIMO / MEDIA
         - stock > minimo -> Sin alerta
         
@@ -214,9 +214,9 @@ class AlertService:
         """
         if stock == 0:
             return TipoAlertaEnum.STOCK_AGOTADO, PrioridadAlertaEnum.CRITICA
-        elif stock < minimo / 2:
+        elif stock < minimo:
             return TipoAlertaEnum.STOCK_CRITICO, PrioridadAlertaEnum.ALTA
-        elif stock <= minimo:
+        elif stock == minimo:
             return TipoAlertaEnum.STOCK_MINIMO, PrioridadAlertaEnum.MEDIA
         else:
             return None, None
@@ -265,7 +265,14 @@ class AlertService:
 
         
         if existing:
-            if existing.tipo != alert_type or existing.prioridad != priority:
+            # Ya existe alerta activa            
+            #verificar si cambió el tipo o prioridad
+            tipo_cambio = existing.tipo != alert_type
+            prioridad_cambio = existing.prioridad != priority
+            stock_cambio = existing.stock_actual != medicamento.stock
+            
+            if tipo_cambio or prioridad_cambio or stock_cambio:
+                # Usar factory para regenerar mensaje actualizado
                 factory = AlertFactoryRegistry.get_factory('stock')
                 mensaje = factory.generate_message(medicamento, alert_type)
 
@@ -273,6 +280,7 @@ class AlertService:
                 existing.prioridad = priority
                 existing.mensaje = mensaje
                 existing.stock_actual = medicamento.stock
+                existing.stock_minimo = medicamento.minimo_stock
                 existing.updated_at = datetime.now()
 
                 self.db.commit()
@@ -327,8 +335,12 @@ class AlertService:
         ).first()
         
         if existing:
-            # Actualizar si cambió el tipo o prioridad
-            if existing.tipo != alert_type or existing.prioridad != priority:
+            #actualizar si cambió el tipo, prioridad o días restantes
+            tipo_cambio = existing.tipo != alert_type
+            prioridad_cambio = existing.prioridad != priority
+            dias_cambio = existing.dias_restantes != dias_restantes
+            
+            if tipo_cambio or prioridad_cambio or dias_cambio:
                 # Usar factory para regenerar mensaje actualizado
                 factory = AlertFactoryRegistry.get_factory('expiration')
                 mensaje = factory.generate_message(medicamento, alert_type, dias_restantes)
