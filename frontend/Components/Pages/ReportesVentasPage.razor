@@ -4,6 +4,9 @@
 @inject IVentaService VentaService
 @inject IAuthService AuthService
 @inject IJSRuntime JS
+@inject NavigationManager NavigationManager
+@inject IVentaService VentaService
+
 
 <PageTitle>Reportes de Ventas</PageTitle>
 
@@ -278,7 +281,37 @@
     private ProyeccionDemandaDto? proyeccionGenerada;
     private bool generandoReporte = false;
     private bool generandoProyeccion = false;
+    private bool isLoading = true;
     private string errorMessage = string.Empty;
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadVentas();
+    }
+
+    private async Task LoadVentas()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+        StateHasChanged(); // Forzar renderizado para mostrar loading
+
+        try
+        {
+            await VentaService.ListarVentasAsync();
+            isLoading = false;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al cargar ventas: {ex.Message}";
+            isLoading = false;
+        }
+        
+        StateHasChanged();
+    }
+
+    private void NavigateToVentas()
+    {
+        NavigationManager.NavigateTo("/VentasPage", forceLoad: true);
+    }
 
     private ReporteVentaPeriodoDto reporteModel = new()
     {
@@ -327,10 +360,5 @@
         {
             generandoProyeccion = false;
         }
-    }
-
-    private void NavigateToVentas()
-    {
-        NavigationManager.NavigateTo("/ventas");
     }
 }

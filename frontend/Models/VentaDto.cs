@@ -31,7 +31,10 @@ public class DetalleVentaCreateDto
     public int Cantidad { get; set; }
     
     [Range(0.01, 999999.99, ErrorMessage = "El precio debe ser mayor a 0")]
-    public double? PrecioUnitario { get; set; }
+    public decimal PrecioUnitario { get; set; }
+
+    public string? NombreMedicamento { get; set; } //Para mostrar el nombre
+    public int StockActual { get; set; }
 }
 
 /// <summary>

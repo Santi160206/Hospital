@@ -148,8 +148,7 @@
                     <h5 class="modal-title">💰 Nueva Venta</h5>
                     <button type="button" class="btn-close btn-close-white" @onclick="CloseNuevaVentaModal"></button>
                 </div>
-                <EditForm Model="ventaModel" OnValidSubmit="HandleVentaSubmit">
-                    <DataAnnotationsValidator />
+                <EditForm Model="ventaModel" OnSubmit="HandleVentaSubmit">
                     <div class="modal-body">
                         <!-- Búsqueda de Medicamentos -->
                         <div class="card mb-4">
@@ -162,13 +161,15 @@
                                         <label class="form-label">Buscar medicamento</label>
                                         <div class="input-group">
                                             <input type="text" class="form-control" 
-                                                   @bind="busquedaMedicamento" 
-                                                   @bind:event="oninput"
-                                                   placeholder="Nombre del medicamento..." />
-                                            <button class="btn btn-outline-secondary" type="button" @onclick="BuscarMedicamentos">
-                                                🔍 Buscar
+                                                @bind="busquedaMedicamento" 
+                                                @bind:event="oninput" 
+                                                placeholder="Nombre del medicamento..." />
+                                            <button class="btn btn-outline-secondary" type="button" 
+                                                    @onclick="BuscarMedicamentos"> 
+                                                🔍 Buscar 
                                             </button>
                                         </div>
+                                        
                                         @if (medicamentosEncontrados.Any() && mostrarSugerencias)
                                         {
                                             <div class="autocomplete-suggestions mt-2">
@@ -177,20 +178,19 @@
                                                     <div class="suggestion-item" @onclick="() => SeleccionarMedicamento(med)">
                                                         <strong>@med.Nombre</strong> - @med.Presentacion<br />
                                                         <small class="text-muted">
-                                                            Stock: @med.Stock | Precio: @med.Precio.ToString("C2")
-                                                            @if (med.StockBajo)
-                                                            {
-                                                                <span class="badge bg-warning ms-2">Stock bajo</span>
-                                                            }
+                                                            <!-- QUITAR Stock y Precio aquí porque no los tenemos en la búsqueda -->
+                                                            Haz clic para seleccionar y ver detalles
                                                         </small>
                                                     </div>
                                                 }
                                             </div>
                                         }
                                     </div>
+                                    
                                     <div class="col-md-4">
                                         <label class="form-label">Cantidad</label>
-                                        <input type="number" class="form-control" @bind="cantidadSeleccionada" min="1" value="1" />
+                                        <input type="number" class="form-control" 
+                                            @bind-value="cantidadSeleccionada" min="1" />
                                     </div>
                                 </div>
                             </div>
@@ -223,45 +223,41 @@
                                             <tbody>
                                                 @foreach (var detalle in ventaModel.Detalles)
                                                 {
-                                                    var medicamento = medicamentosEncontrados.FirstOrDefault(m => m.Id == detalle.MedicamentoId);
                                                     <tr>
                                                         <td>
-                                                            @if (medicamento != null)
-                                                            {
-                                                                <div>
-                                                                    <strong>@medicamento.Nombre</strong><br />
-                                                                    <small class="text-muted">@medicamento.Presentacion</small>
-                                                                    @if (detalle.Cantidad > medicamento.Stock)
-                                                                    {
-                                                                        <br /><span class="badge bg-danger">Stock insuficiente</span>
-                                                                    }
-                                                                </div>
-                                                            }
-                                                            else
-                                                            {
-                                                                <span class="text-danger">Medicamento no encontrado</span>
-                                                            }
+                                                            <!-- ✅ USAR LOS DATOS QUE YA GUARDASTE EN EL DETALLE -->
+                                                            <div>
+                                                                <strong>@detalle.NombreMedicamento</strong><br />
+                                                                @if (detalle.Cantidad > detalle.StockActual)
+                                                                {
+                                                                    <span class="badge bg-danger">Stock insuficiente (Disponible: @detalle.StockActual)</span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <small class="text-muted">Stock disponible: @detalle.StockActual</small>
+                                                                }
+                                                            </div>
                                                         </td>
                                                         <td>
                                                             <input type="number" class="form-control form-control-sm" 
-                                                                   @bind="detalle.Cantidad" 
-                                                                   @onchange="() => StateHasChanged()"
-                                                                   min="1" style="width: 80px;" />
+                                                                @bind-value="detalle.Cantidad" 
+                                                                @bind-value:event="onchange" 
+                                                                min="1" style="width: 80px;" />
                                                         </td>
                                                         <td>
+                                                            <!-- ✅ MOSTRAR EL PRECIO REAL QUE SE OBTUVO -->
                                                             <input type="number" class="form-control form-control-sm" 
-                                                                   @bind="detalle.PrecioUnitario"
-                                                                   @onchange="() => StateHasChanged()"
-                                                                   step="0.01" min="0.01" style="width: 120px;" 
-                                                                   placeholder="@(medicamento?.Precio.ToString("F2") ?? "0.00")" />
+                                                                @bind-value="detalle.PrecioUnitario" 
+                                                                @bind-value:event="onchange" 
+                                                                step="0.01" min="0.01" style="width: 120px;" />
                                                         </td>
                                                         <td>
                                                             <strong>@CalcularSubtotal(detalle).ToString("C2")</strong>
                                                         </td>
                                                         <td>
                                                             <button type="button" class="btn btn-sm btn-danger" 
-                                                                    @onclick="() => RemoverDetalle(detalle)">
-                                                                🗑️
+                                                                    @onclick="() => RemoverDetalle(detalle)"> 
+                                                                🗑️ 
                                                             </button>
                                                         </td>
                                                     </tr>
@@ -307,8 +303,13 @@
                             {
                                 <span class="spinner-border spinner-border-sm me-2"></span>
                             }
-                            💰 Registrar Venta
+                            Registrar Venta
                         </button>
+
+                        <!--Debug -->
+                        <div class="text-muted small">
+                            Debug: ventaSubmitting=@ventaSubmitting, DetallesCount=@ventaModel.Detalles.Count
+                        </div>
                     </div>
                 </EditForm>
             </div>
@@ -460,7 +461,7 @@
         busquedaMedicamento = string.Empty;
     }
 
-    private async Task BuscarMedicamentos()
+   private async Task BuscarMedicamentos()
     {
         if (string.IsNullOrWhiteSpace(busquedaMedicamento))
             return;
@@ -468,13 +469,14 @@
         try
         {
             var resultados = await MedicamentoService.SearchAsync(busquedaMedicamento, "nombre", 10);
+            
+            // Mapear solo los datos básicos que sí tiene MedicamentoShortDto
             medicamentosEncontrados = resultados.Select(r => new MedicamentoDto 
             { 
                 Id = r.Id,
                 Nombre = r.Nombre,
-                Presentacion = r.Presentacion,
-                Stock = 0, // Necesitarías obtener el stock completo
-                Precio = 0 // Y el precio
+                Presentacion = r.Presentacion
+                // Stock y Precio se obtendrán después al seleccionar
             }).ToList();
             
             mostrarSugerencias = true;
@@ -486,22 +488,59 @@
         }
     }
 
-    private void SeleccionarMedicamento(MedicamentoDto medicamento)
+   private async Task SeleccionarMedicamento(MedicamentoDto medicamentoBasico)
     {
-        var detalle = new DetalleVentaCreateDto
+        try
         {
-            MedicamentoId = medicamento.Id,
-            Cantidad = cantidadSeleccionada,
-            PrecioUnitario = medicamento.Precio > 0 ? medicamento.Precio : null
-        };
+            // ✅ Obtener detalles completos del medicamento
+            var medicamentoCompleto = await MedicamentoService.GetByIdAsync(medicamentoBasico.Id);
 
-        ventaModel.Detalles.Add(detalle);
-        busquedaMedicamento = string.Empty;
-        medicamentosEncontrados.Clear();
-        mostrarSugerencias = false;
-        cantidadSeleccionada = 1;
-        StateHasChanged();
+            if (medicamentoCompleto == null)
+            {
+                await MostrarError("Medicamento no encontrado");
+                return;
+            }
+
+            // ✅ Verificar stock
+            if (medicamentoCompleto.Stock <= 0)
+            {
+                await MostrarError($"El medicamento '{medicamentoCompleto.Nombre}' no tiene stock disponible");
+                return;
+            }
+
+            // ✅ Verificar precio
+            if (medicamentoCompleto.Precio <= 0)
+            {
+                await MostrarError($"El medicamento '{medicamentoCompleto.Nombre}' no tiene precio asignado");
+                return;
+            }
+
+            // Crear detalle listo para el formulario
+            var detalle = new DetalleVentaCreateDto
+            {
+                MedicamentoId = medicamentoCompleto.Id,
+                NombreMedicamento = medicamentoCompleto.Nombre,
+                Cantidad = cantidadSeleccionada,
+                PrecioUnitario = medicamentoCompleto.Precio, 
+                StockActual = medicamentoCompleto.Stock
+            };
+
+            ventaModel.Detalles.Add(detalle);
+
+            // Reset de campos
+            busquedaMedicamento = string.Empty;
+            medicamentosEncontrados.Clear();
+            mostrarSugerencias = false;
+            cantidadSeleccionada = 1;
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await MostrarError($"Error al obtener detalles del medicamento: {ex.Message}");
+        }
     }
+
 
     private void RemoverDetalle(DetalleVentaCreateDto detalle)
     {
@@ -511,8 +550,7 @@
 
     private double CalcularSubtotal(DetalleVentaCreateDto detalle)
     {
-        var precio = detalle.PrecioUnitario ?? 0;
-        return precio * detalle.Cantidad;
+        return (detalle.PrecioUnitario ?? 0) * detalle.Cantidad;
     }
 
     private double CalcularTotalVenta()
@@ -525,6 +563,7 @@
         try
         {
             ventaSubmitting = true;
+            StateHasChanged(); // Forzar actualización UI
 
             // Validar stock antes de enviar
             foreach (var detalle in ventaModel.Detalles)
@@ -533,6 +572,8 @@
                 if (medicamento != null && detalle.Cantidad > medicamento.Stock)
                 {
                     await MostrarError($"Stock insuficiente para {medicamento.Nombre}. Stock disponible: {medicamento.Stock}");
+                    ventaSubmitting = false; // ← Asegurar reset
+                    StateHasChanged();
                     return;
                 }
             }
@@ -554,6 +595,7 @@
         finally
         {
             ventaSubmitting = false;
+            StateHasChanged(); // ← Forzar actualización después del reset
         }
     }
 

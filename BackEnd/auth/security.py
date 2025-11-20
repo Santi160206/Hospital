@@ -41,6 +41,15 @@ def require_farmaceutico_or_admin(current_user: dict = Depends(get_current_user)
         )
     return current_user
 
+def require_farmaceutico(user: dict = Depends(get_current_user)):
+    if user["role"].upper() != "FARMACEUTICO":
+        raise HTTPException(
+            status_code=403,
+            detail="No tienes permisos de farmacéutico"
+        )
+    return user
+
+
 
 def require_compras_or_admin(current_user: dict = Depends(get_current_user)):
     """Responsables de compras y administradores pueden ejecutar esta acción."""
