@@ -60,6 +60,9 @@ builder.Services.AddScoped<IOrdenCompraService, OrdenCompraService>();
 // Register ReporteService (HU-4.03 - uses AuthenticatedApi client)
 builder.Services.AddScoped<IReporteService, ReporteService>();
 
+builder.Services.AddScoped<IVentaService, VentaService>();
+
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

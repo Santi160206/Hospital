@@ -7,6 +7,7 @@ import uvicorn
 from database.connection import engine, Base, get_db
 
 from routes import medicamentos, auth, users, alertas, proveedores, ordenes, reportes
+from routes.ventas import router as ventas_router
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
@@ -32,6 +33,8 @@ app.include_router(alertas.router, prefix="/api/alertas", tags=["alertas"])
 app.include_router(proveedores.router, prefix="/api/proveedores", tags=["proveedores"])
 app.include_router(ordenes.router, prefix="/api/ordenes", tags=["ordenes"])
 app.include_router(reportes.router, prefix="/api/reportes", tags=["reportes"])
+app.include_router(ventas_router, prefix="/api/ventas", tags=["ventas"])
+# app.include_router(alertas.router, prefix="/api/alertas", tags=["alertas"])  #para implementar después
 
 
 @app.get("/")

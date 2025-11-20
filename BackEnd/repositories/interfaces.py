@@ -11,4 +11,5 @@ from .interfaces.movimiento_repository import IMovimientoRepository
 __all__ = [
     'IMedicamentoRepository',
     'IMovimientoRepository',
+    'IVentaRepository',
 ]

@@ -1,48 +1,632 @@
 @page "/VentasPage"
 @using FrontEndBlazor.Models
 @using FrontEndBlazor.Services
+@inject IVentaService VentaService
 @inject IMedicamentoService MedicamentoService
 @inject IAuthService AuthService
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JS
 
 <PageTitle>Dashboard de Ventas</PageTitle>
 
-<h3 class="mb-4">Resumen General</h3>
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="title-style">💰 Registro de Ventas</h2>
+            <p class="text-muted">Registre ventas y actualice automáticamente el stock</p>
+        </div>
+        <div>
+            <button class="btn btn-primary" @onclick="OpenNuevaVentaModal">
+                ➕ Nueva Venta
+            </button>
+            <button class="btn btn-outline-secondary ms-2" @onclick="NavigateToReportes">
+                📊 Reportes
+            </button>
+        </div>
+    </div>
 
-@*<div class="grid grid-cols-4 gap-4">
-    <Card><CardContent><h4>@TotalVentas</h4><p>Ventas del Mes</p></CardContent></Card>
-    <Card><CardContent><h4>@TotalUnidades</h4><p>Medicamentos Vendidos</p></CardContent></Card>
-    <Card><CardContent><h4>@StockCritico</h4><p>Stock Crítico</p></CardContent></Card>
-    <Card><CardContent><h4>@IngresosTotales</h4><p>Ingresos</p></CardContent></Card>
-</div>
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Fecha Inicio</label>
+                    <input type="date" class="form-control" @bind="filtroFechaInicio" @bind:format="yyyy-MM-dd" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Fecha Fin</label>
+                    <input type="date" class="form-control" @bind="filtroFechaFin" @bind:format="yyyy-MM-dd" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Buscar por cliente</label>
+                    <input type="text" class="form-control" @bind="filtroCliente" placeholder="Nombre del cliente..." />
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary w-100" @onclick="AplicarFiltros" disabled="@loading">
+                        🔍 Filtrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-<div class="mt-6 grid grid-cols-2 gap-6">
-    <Card><CardContent><VentasMensualesChart /></CardContent></Card>
-    <Card><CardContent><MedicamentosMasVendidosChart /></CardContent></Card>
-</div>
-
-@code{
-    private int TotalVentas { get; set; }
-    private int TotalUnidadesVendidas { get; set; }
-    private int StockCritico { get; set; }
-    protected override async Task OnInitializedAsync()
+    <!-- Alertas -->
+    @if (!string.IsNullOrEmpty(successMessage))
     {
-        var resumen = await Http.GetFromJsonAsync<ResumenVentas>("api/dashboard/ventas/resumen");
-        TotalVentas = resumen.TotalVentas;
-        TotalUnidadesVendidas = resumen.TotalUnidadesVendidas;
-        StockCritico = resumen.StockCritico;
+        <div class="alert alert-success alert-dismissible fade show">
+            ✅ @successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = string.Empty"></button>
+        </div>
     }
-}*@
 
-<p role="status">Current count: @currentCount</p>
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            ❌ @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = string.Empty"></button>
+        </div>
+    }
 
-<button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+    <!-- Loading -->
+    @if (loading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-3">Cargando ventas...</p>
+        </div>
+    }
+    else if (!ventas.Any())
+    {
+        <div class="alert alert-info text-center">
+            <h5>📭 No hay ventas registradas</h5>
+            <p>Comience registrando una nueva venta haciendo clic en "Nueva Venta"</p>
+        </div>
+    }
+    else
+    {
+        <!-- Tabla de Ventas -->
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Fecha</th>
+                                <th>Cliente</th>
+                                <th>Total</th>
+                                <th>Items</th>
+                                <th>Vendedor</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var venta in ventas)
+                            {
+                                <tr>
+                                    <td>
+                                        <small class="text-muted">@venta.Id.Substring(0, 8)...</small>
+                                    </td>
+                                    <td>@venta.FechaFormateada</td>
+                                    <td>@(venta.Cliente ?? "Sin cliente")</td>
+                                    <td>
+                                        <strong class="text-success">@venta.TotalFormateado</strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-primary">@venta.Detalles.Count items</span>
+                                    </td>
+                                    <td>@venta.UsuarioNombre</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-info" @onclick="() => OpenDetalleVentaModal(venta)" title="Ver detalle">
+                                            👁️ Detalle
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-3">
+                    <small class="text-muted">
+                        Mostrando @ventas.Count venta(s) - 
+                        Total: <strong>@ventas.Sum(v => v.Total).ToString("C2")</strong>
+                    </small>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Modal Nueva Venta -->
+@if (showNuevaVentaModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">💰 Nueva Venta</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseNuevaVentaModal"></button>
+                </div>
+                <EditForm Model="ventaModel" OnSubmit="HandleVentaSubmit">
+                    <div class="modal-body">
+                        <!-- Búsqueda de Medicamentos -->
+                        <div class="card mb-4">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">🔍 Agregar Medicamentos</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-8">
+                                        <label class="form-label">Buscar medicamento</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" 
+                                                @bind="busquedaMedicamento" 
+                                                @bind:event="oninput" 
+                                                placeholder="Nombre del medicamento..." />
+                                            <button class="btn btn-outline-secondary" type="button" 
+                                                    @onclick="BuscarMedicamentos"> 
+                                                🔍 Buscar 
+                                            </button>
+                                        </div>
+                                        
+                                        @if (medicamentosEncontrados.Any() && mostrarSugerencias)
+                                        {
+                                            <div class="autocomplete-suggestions mt-2">
+                                                @foreach (var med in medicamentosEncontrados)
+                                                {
+                                                    <div class="suggestion-item" @onclick="() => SeleccionarMedicamento(med)">
+                                                        <strong>@med.Nombre</strong> - @med.Presentacion<br />
+                                                        <small class="text-muted">
+                                                            <!-- QUITAR Stock y Precio aquí porque no los tenemos en la búsqueda -->
+                                                            Haz clic para seleccionar y ver detalles
+                                                        </small>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                    
+                                    <div class="col-md-4">
+                                        <label class="form-label">Cantidad</label>
+                                        <input type="number" class="form-control" 
+                                            @bind-value="cantidadSeleccionada" min="1" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Detalles de la Venta -->
+                        <div class="card mb-4">
+                            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">🛒 Detalles de la Venta</h6>
+                                <span class="badge bg-primary">Total: @CalcularTotalVenta().ToString("C2")</span>
+                            </div>
+                            <div class="card-body">
+                                @if (!ventaModel.Detalles.Any())
+                                {
+                                    <p class="text-muted text-center py-3">No hay medicamentos agregados a la venta</p>
+                                }
+                                else
+                                {
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Medicamento</th>
+                                                    <th>Cantidad</th>
+                                                    <th>Precio Unitario</th>
+                                                    <th>Subtotal</th>
+                                                    <th>Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var detalle in ventaModel.Detalles)
+                                                {
+                                                    <tr>
+                                                        <td>
+                                                            <!-- ✅ USAR LOS DATOS QUE YA GUARDASTE EN EL DETALLE -->
+                                                            <div>
+                                                                <strong>@detalle.NombreMedicamento</strong><br />
+                                                                @if (detalle.Cantidad > detalle.StockActual)
+                                                                {
+                                                                    <span class="badge bg-danger">Stock insuficiente (Disponible: @detalle.StockActual)</span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <small class="text-muted">Stock disponible: @detalle.StockActual</small>
+                                                                }
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            <input type="number" class="form-control form-control-sm" 
+                                                                @bind-value="detalle.Cantidad" 
+                                                                @bind-value:event="onchange" 
+                                                                min="1" style="width: 80px;" />
+                                                        </td>
+                                                        <td>
+                                                            <!-- ✅ MOSTRAR EL PRECIO REAL QUE SE OBTUVO -->
+                                                            <input type="number" class="form-control form-control-sm" 
+                                                                @bind-value="detalle.PrecioUnitario" 
+                                                                @bind-value:event="onchange" 
+                                                                step="0.01" min="0.01" style="width: 120px;" />
+                                                        </td>
+                                                        <td>
+                                                            <strong>@CalcularSubtotal(detalle).ToString("C2")</strong>
+                                                        </td>
+                                                        <td>
+                                                            <button type="button" class="btn btn-sm btn-danger" 
+                                                                    @onclick="() => RemoverDetalle(detalle)"> 
+                                                                🗑️ 
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Información Adicional -->
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Cliente (Opcional)</label>
+                                <InputText class="form-control" @bind-Value="ventaModel.Cliente" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Notas (Opcional)</label>
+                                <InputText class="form-control" @bind-Value="ventaModel.Notas" />
+                            </div>
+                        </div>
+
+                        <!-- Resumen -->
+                        <div class="alert alert-info mt-3">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <strong>Total Items:</strong> @ventaModel.Detalles.Count<br />
+                                    <strong>Total Unidades:</strong> @ventaModel.Detalles.Sum(d => d.Cantidad)
+                                </div>
+                                <div class="col-md-6 text-end">
+                                    <h5 class="text-success mb-0">Total: @CalcularTotalVenta().ToString("C2")</h5>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseNuevaVentaModal" disabled="@ventaSubmitting">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary" disabled="@ventaSubmitting || !ventaModel.Detalles.Any()">
+                            @if (ventaSubmitting)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            Registrar Venta
+                        </button>
+
+                        <!--Debug -->
+                        <div class="text-muted small">
+                            Debug: ventaSubmitting=@ventaSubmitting, DetallesCount=@ventaModel.Detalles.Count
+                        </div>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal Detalle Venta -->
+@if (showDetalleVentaModal && ventaSeleccionada != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title">👁️ Detalle de Venta</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseDetalleVentaModal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Información General -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <p><strong>ID Venta:</strong> @ventaSeleccionada.Id</p>
+                            <p><strong>Fecha:</strong> @ventaSeleccionada.FechaFormateada</p>
+                            <p><strong>Vendedor:</strong> @ventaSeleccionada.UsuarioNombre</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Cliente:</strong> @(ventaSeleccionada.Cliente ?? "No especificado")</p>
+                            <p><strong>Notas:</strong> @(ventaSeleccionada.Notas ?? "Sin notas")</p>
+                            <h4 class="text-success">@ventaSeleccionada.TotalFormateado</h4>
+                        </div>
+                    </div>
+
+                    <!-- Detalles -->
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">🛒 Medicamentos Vendidos</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Medicamento</th>
+                                            <th>Cantidad</th>
+                                            <th>Precio Unitario</th>
+                                            <th>Subtotal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var detalle in ventaSeleccionada.Detalles)
+                                        {
+                                            <tr>
+                                                <td>
+                                                    <strong>@detalle.MedicamentoNombre</strong>
+                                                </td>
+                                                <td>@detalle.Cantidad</td>
+                                                <td>@detalle.PrecioUnitarioFormateado</td>
+                                                <td>
+                                                    <strong>@detalle.SubtotalFormateado</strong>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="table-success">
+                                            <td colspan="3" class="text-end"><strong>Total:</strong></td>
+                                            <td><strong>@ventaSeleccionada.TotalFormateado</strong></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDetalleVentaModal">
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
-    private int currentCount = 0;
+    private List<VentaDto> ventas = new();
+    private bool loading = false;
+    private string successMessage = string.Empty;
+    private string errorMessage = string.Empty;
 
-    private void IncrementCount()
+    // Filtros
+    private DateTime filtroFechaInicio = DateTime.Today.AddDays(-7);
+    private DateTime filtroFechaFin = DateTime.Today;
+    private string filtroCliente = string.Empty;
+
+    // Modal Nueva Venta
+    private bool showNuevaVentaModal = false;
+    private bool ventaSubmitting = false;
+    private VentaCreateDto ventaModel = new();
+
+    // Búsqueda de medicamentos
+    private string busquedaMedicamento = string.Empty;
+    private List<MedicamentoDto> medicamentosEncontrados = new();
+    private bool mostrarSugerencias = false;
+    private int cantidadSeleccionada = 1;
+
+    // Modal Detalle
+    private bool showDetalleVentaModal = false;
+    private VentaDto? ventaSeleccionada;
+
+    protected override async Task OnInitializedAsync()
     {
-        currentCount++;
+        await CargarVentas();
+    }
+
+    private async Task CargarVentas()
+    {
+        try
+        {
+            loading = true;
+            ventas = await VentaService.ListarVentasAsync(filtroFechaInicio, filtroFechaFin);
+        }
+        catch (Exception ex)
+        {
+            await MostrarError($"Error al cargar ventas: {ex.Message}");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task AplicarFiltros()
+    {
+        await CargarVentas();
+    }
+
+    private void OpenNuevaVentaModal()
+    {
+        ventaModel = new VentaCreateDto();
+        showNuevaVentaModal = true;
+    }
+
+    private void CloseNuevaVentaModal()
+    {
+        showNuevaVentaModal = false;
+        ventaModel = new VentaCreateDto();
+        medicamentosEncontrados.Clear();
+        busquedaMedicamento = string.Empty;
+    }
+
+   private async Task BuscarMedicamentos()
+    {
+        if (string.IsNullOrWhiteSpace(busquedaMedicamento))
+            return;
+
+        try
+        {
+            var resultados = await MedicamentoService.SearchAsync(busquedaMedicamento, "nombre", 10);
+            
+            // Mapear solo los datos básicos que sí tiene MedicamentoShortDto
+            medicamentosEncontrados = resultados.Select(r => new MedicamentoDto 
+            { 
+                Id = r.Id,
+                Nombre = r.Nombre,
+                Presentacion = r.Presentacion
+                // Stock y Precio se obtendrán después al seleccionar
+            }).ToList();
+            
+            mostrarSugerencias = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await MostrarError($"Error al buscar medicamentos: {ex.Message}");
+        }
+    }
+
+   private async Task SeleccionarMedicamento(MedicamentoDto medicamentoBasico)
+    {
+        try
+        {
+            // ✅ Obtener detalles completos del medicamento
+            var medicamentoCompleto = await MedicamentoService.GetByIdAsync(medicamentoBasico.Id);
+
+            if (medicamentoCompleto == null)
+            {
+                await MostrarError("Medicamento no encontrado");
+                return;
+            }
+
+            // ✅ Verificar stock
+            if (medicamentoCompleto.Stock <= 0)
+            {
+                await MostrarError($"El medicamento '{medicamentoCompleto.Nombre}' no tiene stock disponible");
+                return;
+            }
+
+            // ✅ Verificar precio
+            if (medicamentoCompleto.Precio <= 0)
+            {
+                await MostrarError($"El medicamento '{medicamentoCompleto.Nombre}' no tiene precio asignado");
+                return;
+            }
+
+            // Crear detalle listo para el formulario
+            var detalle = new DetalleVentaCreateDto
+            {
+                MedicamentoId = medicamentoCompleto.Id,
+                NombreMedicamento = medicamentoCompleto.Nombre,
+                Cantidad = cantidadSeleccionada,
+                PrecioUnitario = medicamentoCompleto.Precio, 
+                StockActual = medicamentoCompleto.Stock
+            };
+
+            ventaModel.Detalles.Add(detalle);
+
+            // Reset de campos
+            busquedaMedicamento = string.Empty;
+            medicamentosEncontrados.Clear();
+            mostrarSugerencias = false;
+            cantidadSeleccionada = 1;
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await MostrarError($"Error al obtener detalles del medicamento: {ex.Message}");
+        }
+    }
+
+
+    private void RemoverDetalle(DetalleVentaCreateDto detalle)
+    {
+        ventaModel.Detalles.Remove(detalle);
+        StateHasChanged();
+    }
+
+    private double CalcularSubtotal(DetalleVentaCreateDto detalle)
+    {
+        return (detalle.PrecioUnitario ?? 0) * detalle.Cantidad;
+    }
+
+    private double CalcularTotalVenta()
+    {
+        return ventaModel.Detalles.Sum(CalcularSubtotal);
+    }
+
+    private async Task HandleVentaSubmit()
+    {
+        try
+        {
+            ventaSubmitting = true;
+            StateHasChanged(); // Forzar actualización UI
+
+            // Validar stock antes de enviar
+            foreach (var detalle in ventaModel.Detalles)
+            {
+                var medicamento = await MedicamentoService.GetByIdAsync(detalle.MedicamentoId);
+                if (medicamento != null && detalle.Cantidad > medicamento.Stock)
+                {
+                    await MostrarError($"Stock insuficiente para {medicamento.Nombre}. Stock disponible: {medicamento.Stock}");
+                    ventaSubmitting = false; // ← Asegurar reset
+                    StateHasChanged();
+                    return;
+                }
+            }
+
+            var ventaCreada = await VentaService.CrearVentaAsync(ventaModel);
+            await MostrarExito($"Venta registrada exitosamente! Total: {ventaCreada.TotalFormateado}");
+            
+            CloseNuevaVentaModal();
+            await CargarVentas();
+        }
+        catch (InvalidOperationException ex)
+        {
+            await MostrarError(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            await MostrarError($"Error al registrar venta: {ex.Message}");
+        }
+        finally
+        {
+            ventaSubmitting = false;
+            StateHasChanged(); // ← Forzar actualización después del reset
+        }
+    }
+
+    private void OpenDetalleVentaModal(VentaDto venta)
+    {
+        ventaSeleccionada = venta;
+        showDetalleVentaModal = true;
+    }
+
+    private void CloseDetalleVentaModal()
+    {
+        showDetalleVentaModal = false;
+        ventaSeleccionada = null;
+    }
+
+    private void NavigateToReportes()
+    {
+        NavigationManager.NavigateTo("/reportes-ventas");
+    }
+
+    private async Task MostrarExito(string mensaje)
+    {
+        successMessage = mensaje;
+        errorMessage = string.Empty;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task MostrarError(string mensaje)
+    {
+        errorMessage = mensaje;
+        successMessage = string.Empty;
+        await InvokeAsync(StateHasChanged);
     }
 }
