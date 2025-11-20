@@ -28,6 +28,7 @@ public interface IAuthService
     Task LogoutAsync();
     Task<bool> IsAuthenticatedAsync();
     Task LoadTokenAsync();
+    Task<string> GetUserRoleAsync();
 }
 
 public class AuthService : IAuthService
@@ -175,6 +176,49 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             Console.WriteLine($"[AuthService.LoadToken] ❌ Error al cargar token: {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Obtiene el rol del usuario desde el token JWT
+    /// </summary>
+    public async Task<string> GetUserRoleAsync()
+    {
+        try
+        {
+            var result = await _sessionStorage.GetAsync<string>(TOKEN_KEY);
+            if (!result.Success || string.IsNullOrEmpty(result.Value))
+                return string.Empty;
+            
+            // Decodificar JWT (formato: header.payload.signature)
+            var parts = result.Value.Split('.');
+            if (parts.Length != 3)
+                return string.Empty;
+            
+            // Decodificar payload (base64)
+            var payload = parts[1];
+            // Agregar padding si es necesario
+            var padding = payload.Length % 4;
+            if (padding > 0)
+                payload += new string('=', 4 - padding);
+            
+            var payloadBytes = Convert.FromBase64String(payload);
+            var payloadJson = System.Text.Encoding.UTF8.GetString(payloadBytes);
+            
+            // Parsear JSON y obtener rol
+            var payloadData = JsonSerializer.Deserialize<Dictionary<string, object>>(payloadJson);
+            if (payloadData != null && payloadData.ContainsKey("role"))
+            {
+                var role = payloadData["role"]?.ToString() ?? string.Empty;
+                return role.ToLower();
+            }
+            
+            return string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[AuthService.GetUserRole] Error: {ex.Message}");
+            return string.Empty;
         }
     }
 }

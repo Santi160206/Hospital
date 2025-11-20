@@ -87,8 +87,7 @@
 
             if (success)
             {
-                // Navegar sin forceLoad para mantener el mismo circuito de Blazor
-                NavigationManager.NavigateTo("/", forceLoad: false);
+                NavigationManager.NavigateTo("/", forceLoad: true);
             }
             else
             {

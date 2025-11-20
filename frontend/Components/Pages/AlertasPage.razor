@@ -1,0 +1,413 @@
+@page "/AlertasPage"
+@using FrontEndBlazor.Models
+@using FrontEndBlazor.Services
+@inject IAlertaService AlertaService
+@inject IAuthService AuthService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Alertas y Notificaciones</PageTitle>
+
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="title-style">🔔 Sistema de Alertas</h2>
+            <p class="text-muted">Monitoreo de stock y vencimientos en tiempo real</p>
+        </div>
+        <div>
+            <button class="btn btn-outline-secondary" @onclick="LoadAlertas">
+                🔄 Recargar
+            </button>
+        </div>
+    </div>
+
+    <!-- Estadísticas -->
+    @if (stats != null)
+    {
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-center border-danger">
+                    <div class="card-body">
+                        <h3 class="text-danger">@stats.TotalActivas</h3>
+                        <p class="mb-0 text-muted">Alertas Activas</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center border-warning">
+                    <div class="card-body">
+                        <h3 class="text-warning">@GetPrioridadCount("CRITICA")</h3>
+                        <p class="mb-0 text-muted">Críticas</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center border-success">
+                    <div class="card-body">
+                        <h3 class="text-success">@stats.ResueltasHoy</h3>
+                        <p class="mb-0 text-muted">Resueltas Hoy</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center border-info">
+                    <div class="card-body">
+                        <h3 class="text-info">@stats.CreadasHoy</h3>
+                        <p class="mb-0 text-muted">Creadas Hoy</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Estado</label>
+                    <select class="form-select" @bind="filtroEstado">
+                        <option value="">Todos</option>
+                        <option value="ACTIVA">Activas</option>
+                        <option value="PENDIENTE_REPOSICION">Pendiente Reposición</option>
+                        <option value="RESUELTA">Resueltas</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Tipo</label>
+                    <select class="form-select" @bind="filtroTipo">
+                        <option value="">Todos</option>
+                        <option value="STOCK_AGOTADO">Stock Agotado</option>
+                        <option value="STOCK_CRITICO">Stock Crítico</option>
+                        <option value="STOCK_MINIMO">Stock Mínimo</option>
+                        <option value="VENCIDO">Vencido</option>
+                        <option value="VENCIMIENTO_INMEDIATO">Vence Pronto</option>
+                        <option value="VENCIMIENTO_PROXIMO">Próximo a Vencer</option>
+                        <option value="ORDEN_RETRASADA">Orden Retrasada</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Prioridad</label>
+                    <select class="form-select" @bind="filtroPrioridad">
+                        <option value="">Todas</option>
+                        <option value="CRITICA">Crítica</option>
+                        <option value="ALTA">Alta</option>
+                        <option value="MEDIA">Media</option>
+                        <option value="BAJA">Baja</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" @onclick="AplicarFiltros">
+                        🔍 Buscar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alertas -->
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            ✅ @successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = string.Empty"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            ❌ @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = string.Empty"></button>
+        </div>
+    }
+
+    @if (loading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-3">Cargando alertas...</p>
+        </div>
+    }
+    else if (alertas == null || !alertas.Any())
+    {
+        <div class="alert alert-info">
+            ℹ️ No hay alertas para mostrar.
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Medicamento</th>
+                                <th>Tipo</th>
+                                <th>Prioridad</th>
+                                <th>Estado</th>
+                                <th>Mensaje</th>
+                                <th>Fecha</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var alerta in alertas)
+                            {
+                                <tr class="@GetRowClass(alerta)">
+                                    <td style="font-size: 1.5rem;">@alerta.TipoIcon</td>
+                                    <td>
+                                        @if (alerta.Tipo == TipoAlerta.ORDEN_RETRASADA)
+                                        {
+                                            <!-- Información de Orden de Compra -->
+                                            <div class="fw-bold">@alerta.MedicamentoNombre</div>
+                                            <div class="small text-muted">
+                                                Proveedor: @alerta.MedicamentoFabricante
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(alerta.MedicamentoPresentacion))
+                                            {
+                                                <div class="small text-muted">@alerta.MedicamentoPresentacion</div>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <!-- Información de Medicamento -->
+                                            <div class="fw-bold">@alerta.MedicamentoNombre</div>
+                                            <div class="small text-muted">
+                                                @alerta.MedicamentoFabricante - @alerta.MedicamentoPresentacion
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(alerta.MedicamentoLote))
+                                            {
+                                                <div class="small text-muted">Lote: @alerta.MedicamentoLote</div>
+                                            }
+                                        }
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <span class="badge bg-secondary">@alerta.TipoLabel</span>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <span class="@alerta.PrioridadBadgeClass">@alerta.Prioridad</span>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <span class="@alerta.EstadoBadgeClass">@alerta.Estado</span>
+                                    </td>
+                                    <td>
+                                        @alerta.Mensaje
+                                        @if (alerta.Tipo == TipoAlerta.ORDEN_RETRASADA)
+                                        {
+                                            <!-- Información adicional de orden retrasada -->
+                                            <div class="small mt-1">
+                                                @if (alerta.DiasRetraso.HasValue)
+                                                {
+                                                    <span class="badge bg-danger">
+                                                        ⏱️ @alerta.DiasRetraso día@(alerta.DiasRetraso > 1 ? "s" : "") de retraso
+                                                    </span>
+                                                }
+                                                @if (alerta.TotalEstimado.HasValue)
+                                                {
+                                                    <span class="badge bg-info ms-1">
+                                                        💵 $@alerta.TotalEstimado.Value.ToString("N2")
+                                                    </span>
+                                                }
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <!-- Información de stock y vencimiento -->
+                                            @if (alerta.StockActual.HasValue)
+                                            {
+                                                <div class="small text-muted">
+                                                    Stock: @alerta.StockActual / Mínimo: @alerta.StockMinimo
+                                                </div>
+                                            }
+                                            @if (alerta.DiasRestantes.HasValue)
+                                            {
+                                                <div class="small text-muted">
+                                                    @if (alerta.DiasRestantes.Value < 0)
+                                                    {
+                                                        <span class="text-danger">Vencido hace @Math.Abs(alerta.DiasRestantes.Value) días</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span>Vence en @alerta.DiasRestantes días</span>
+                                                    }
+                                                </div>
+                                            }
+                                        }
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">@alerta.TiempoTranscurrido</small>
+                                    </td>
+                                    <td>
+                                        @if (alerta.Estado == EstadoAlerta.ACTIVA)
+                                        {
+                                            <button class="btn btn-sm btn-success" @onclick="() => MarcarComoResuelta(alerta.Id)">
+                                                ✓ Resolver
+                                            </button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private System.Timers.Timer? timer;
+    private List<AlertaDto> alertas = new();
+    private AlertaStatsDto? stats;
+    private bool loading = true;
+    private string successMessage = string.Empty;
+    private string errorMessage = string.Empty;
+
+    // Filtros
+    private string filtroEstado = "";
+    private string filtroTipo = "";
+    private string filtroPrioridad = "";
+
+    private bool firstRender = true;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAlertas();
+        await LoadStats();
+
+        // refrescar cada 5 segundos
+        timer = new System.Timers.Timer(5000);
+        timer.Elapsed += async (_, _) =>
+        {
+            await LoadAlertas();
+            await InvokeAsync(StateHasChanged);
+        };
+        timer.Start();
+    }
+
+    public void Dispose()
+    {
+        timer?.Stop();
+        timer?.Dispose();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && this.firstRender)
+        {
+            this.firstRender = false;
+            await LoadAlertas();
+            await LoadStats();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAlertas()
+    {
+        loading = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            alertas = await AlertaService.GetAlertasActivasAsync(null, null);
+
+            // Parsear filtros
+            EstadoAlerta? estado = null;
+            TipoAlerta? tipo = null;
+            PrioridadAlerta? prioridad = null;
+
+            if (!string.IsNullOrEmpty(filtroEstado) &&
+                Enum.TryParse(filtroEstado, out EstadoAlerta e))
+                estado = e;
+
+            if (!string.IsNullOrEmpty(filtroTipo) &&
+                Enum.TryParse(filtroTipo, out TipoAlerta t))
+                tipo = t;
+
+            if (!string.IsNullOrEmpty(filtroPrioridad) &&
+                Enum.TryParse(filtroPrioridad, out PrioridadAlerta p))
+                prioridad = p;
+
+            // Filtrado avanzado
+            if (estado.HasValue)
+            {
+                alertas = await AlertaService.GetHistorialAlertasAsync(estado?.ToString());
+
+                if (tipo.HasValue)
+                    alertas = alertas.Where(a => a.Tipo == tipo).ToList();
+
+                if (prioridad.HasValue)
+                    alertas = alertas.Where(a => a.Prioridad == prioridad).ToList();
+            }
+            else if (tipo.HasValue || prioridad.HasValue)
+            {
+                alertas = await AlertaService.GetAlertasActivasAsync(tipo, prioridad);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al cargar alertas: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+
+    private async Task LoadStats()
+    {
+        try
+        {
+            stats = await AlertaService.GetEstadisticasAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error cargando estadísticas: {ex.Message}");
+        }
+    }
+
+    private async Task AplicarFiltros()
+    {
+        await LoadAlertas();
+    }
+
+    private async Task MarcarComoResuelta(string alertaId)
+    {
+        try
+        {
+            var dto = new AlertaUpdateEstadoDto
+            {
+                Estado = EstadoAlerta.RESUELTA,
+                Notas = "Resuelta desde el frontend"
+            };
+            
+            await AlertaService.ActualizarEstadoAsync(alertaId, dto);
+            successMessage = "Alerta marcada como resuelta";
+            
+            await LoadAlertas();
+            await LoadStats();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al resolver alerta: {ex.Message}";
+        }
+    }
+
+    private string GetRowClass(AlertaDto alerta)
+    {
+        if (alerta.Estado == EstadoAlerta.RESUELTA) return "table-success";
+        if (alerta.Prioridad == PrioridadAlerta.CRITICA) return "table-danger";
+        if (alerta.Prioridad == PrioridadAlerta.ALTA) return "table-warning";
+        return "";
+    }
+
+    private int GetPrioridadCount(string prioridad)
+    {
+        if (stats?.PorPrioridad == null) return 0;
+        return stats.PorPrioridad.TryGetValue(prioridad, out var count) ? count : 0;
+    }
+}

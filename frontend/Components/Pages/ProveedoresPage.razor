@@ -1,23 +1,574 @@
-@page "/ProveedoresPage"
+@page "/proveedoresPage"
 @using FrontEndBlazor.Models
 @using FrontEndBlazor.Services
-@inject IMedicamentoService MedicamentoService
+@inject IProveedorService ProveedorService
 @inject IAuthService AuthService
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
 
 <PageTitle>Proveedores</PageTitle>
 
-<h1>Proveedores</h1>
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-building"></i> Gestión de Proveedores</h2>
+            <p class="text-muted">HU-4.01: Manejo de proveedores del sistema</p>
+        </div>
+        
+        @if (isAdmin)
+        {
+            <button class="btn btn-primary" @onclick="MostrarModalCrear">
+                <i class="bi bi-plus-circle"></i> Nuevo Proveedor
+            </button>
+        }
+    </div>
 
-<p role="status">Current count: @currentCount</p>
+    @* Estadísticas *@
+    @if (stats != null)
+    {
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card text-center border-primary">
+                    <div class="card-body">
+                        <h5 class="card-title text-primary">Total Proveedores</h5>
+                        <h2 class="display-4">@stats.Total</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center border-success">
+                    <div class="card-body">
+                        <h5 class="card-title text-success">Activos</h5>
+                        <h2 class="display-4">@stats.Activos</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center border-secondary">
+                    <div class="card-body">
+                        <h5 class="card-title text-secondary">Inactivos</h5>
+                        <h2 class="display-4">@stats.Inactivos</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 
-<button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+    @* Filtros *@
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Buscar por nombre</label>
+                    <input type="text" class="form-control" @bind="filtroNombre" @bind:event="oninput" placeholder="Nombre del proveedor...">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Estado</label>
+                    <select class="form-select" @bind="filtroEstado">
+                        <option value="">Todos</option>
+                        <option value="ACTIVO">Activos</option>
+                        <option value="INACTIVO">Inactivos</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" @onclick="CargarProveedores">
+                        <i class="bi bi-search"></i> Buscar
+                    </button>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-secondary w-100" @onclick="LimpiarFiltros">
+                        <i class="bi bi-x-circle"></i> Limpiar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Mensajes *@
+    @if (!string.IsNullOrEmpty(mensajeExito))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle"></i> @mensajeExito
+            <button type="button" class="btn-close" @onclick="@(() => mensajeExito = null)"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(mensajeError))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle"></i> @mensajeError
+            <button type="button" class="btn-close" @onclick="@(() => mensajeError = null)"></button>
+        </div>
+    }
+
+    @* Tabla de proveedores *@
+    @if (cargando)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-2">Cargando proveedores...</p>
+        </div>
+    }
+    else if (proveedores.Count == 0)
+    {
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> No se encontraron proveedores con los filtros aplicados.
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>NIT</th>
+                                <th>Nombre</th>
+                                <th>Teléfono</th>
+                                <th>Email</th>
+                                <th>Estado</th>
+                                <th>Fecha Creación</th>
+                                @if (isAdmin)
+                                {
+                                    <th class="text-center">Acciones</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var proveedor in proveedores)
+                            {
+                                <tr>
+                                    <td><strong>@proveedor.Nit</strong></td>
+                                    <td>@proveedor.Nombre</td>
+                                    <td>@(proveedor.Telefono ?? "-")</td>
+                                    <td>@(proveedor.Email ?? "-")</td>
+                                    <td><span class="@proveedor.EstadoBadgeClass">@proveedor.Estado</span></td>
+                                    <td>@proveedor.CreatedAt.ToString("dd/MM/yyyy")</td>
+                                    @if (isAdmin)
+                                    {
+                                        <td class="text-center">
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <button class="btn btn-outline-info" @onclick="() => MostrarModalDetalle(proveedor)" title="Ver detalle">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
+                                                <button class="btn btn-outline-primary" @onclick="() => MostrarModalEditar(proveedor)" title="Editar">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                
+                                                @if (proveedor.EstaActivo)
+                                                {
+                                                    <button class="btn btn-outline-danger" @onclick="() => ConfirmarDesactivar(proveedor)" title="Desactivar">
+                                                        <i class="bi bi-x-circle"></i>
+                                                    </button>
+                                                }
+                                                else
+                                                {
+                                                    <button class="btn btn-outline-success" @onclick="() => ConfirmarActivar(proveedor)" title="Reactivar">
+                                                        <i class="bi bi-arrow-clockwise"></i>
+                                                    </button>
+                                                }
+                                            </div>
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="mt-3 text-end">
+                    <small class="text-muted">Mostrando @proveedores.Count proveedor(es)</small>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@* Modal Crear/Editar *@
+@if (mostrarModal)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        @if (modoEdicion)
+                        {
+                            <i class="bi bi-pencil"></i> <text>Editar Proveedor</text>
+                        }
+                        else
+                        {
+                            <i class="bi bi-plus-circle"></i> <text>Nuevo Proveedor</text>
+                        }
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CerrarModal"></button>
+                </div>
+                
+                <EditForm Model="@proveedorForm" OnValidSubmit="GuardarProveedor">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="modal-body">
+                        @if (!string.IsNullOrEmpty(errorModal))
+                        {
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle"></i> @errorModal
+                            </div>
+                        }
+                        
+                        <div class="row g-3">
+                            @if (!modoEdicion)
+                            {
+                                <div class="col-md-6">
+                                    <label class="form-label">NIT <span class="text-danger">*</span></label>
+                                    <InputText class="form-control" @bind-Value="proveedorForm.Nit" placeholder="900123456-7" />
+                                    <ValidationMessage For="@(() => proveedorForm.Nit)" class="text-danger" />
+                                    <small class="form-text text-muted">Solo números con guión opcional (ej: 123456789-0)</small>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="col-md-6">
+                                    <label class="form-label">NIT</label>
+                                    <input type="text" class="form-control" value="@proveedorSeleccionado.Nit" disabled />
+                                    <small class="form-text text-muted">El NIT no se puede editar</small>
+                                </div>
+                            }
+                            
+                            <div class="col-md-6">
+                                <label class="form-label">Nombre <span class="text-danger">*</span></label>
+                                <InputText class="form-control" @bind-Value="proveedorForm.Nombre" placeholder="Nombre del proveedor" />
+                                <ValidationMessage For="@(() => proveedorForm.Nombre)" class="text-danger" />
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label class="form-label">Teléfono</label>
+                                <InputText class="form-control" @bind-Value="proveedorForm.Telefono" placeholder="3001234567" />
+                                <ValidationMessage For="@(() => proveedorForm.Telefono)" class="text-danger" />
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label class="form-label">Email</label>
+                                <InputText type="email" class="form-control" @bind-Value="proveedorForm.Email" placeholder="contacto@proveedor.com" />
+                                <ValidationMessage For="@(() => proveedorForm.Email)" class="text-danger" />
+                            </div>
+                            
+                            <div class="col-12">
+                                <label class="form-label">Dirección</label>
+                                <InputTextArea class="form-control" @bind-Value="proveedorForm.Direccion" rows="2" placeholder="Dirección completa" />
+                                <ValidationMessage For="@(() => proveedorForm.Direccion)" class="text-danger" />
+                            </div>
+
+                            @if (modoEdicion)
+                            {
+                                <div class="col-md-6">
+                                    <label class="form-label">Estado</label>
+                                    <select class="form-select" @bind="estadoSeleccionado">
+                                        <option value="ACTIVO">Activo</option>
+                                        <option value="INACTIVO">Inactivo</option>
+                                    </select>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CerrarModal" disabled="@guardando">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary" disabled="@guardando">
+                            @if (guardando)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            }
+                            <i class="bi bi-save"></i> Guardar
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@* Modal Detalle *@
+@if (mostrarModalDetalle && proveedorSeleccionado != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-info-circle"></i> Detalle del Proveedor</h5>
+                    <button type="button" class="btn-close" @onclick="CerrarModalDetalle"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <strong>NIT:</strong><br />
+                            <span class="text-muted">@proveedorSeleccionado.Nit</span>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Estado:</strong><br />
+                            <span class="@proveedorSeleccionado.EstadoBadgeClass">@proveedorSeleccionado.Estado</span>
+                        </div>
+                        <div class="col-12">
+                            <strong>Nombre:</strong><br />
+                            <span class="text-muted">@proveedorSeleccionado.Nombre</span>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Teléfono:</strong><br />
+                            <span class="text-muted">@(proveedorSeleccionado.Telefono ?? "No especificado")</span>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Email:</strong><br />
+                            <span class="text-muted">@(proveedorSeleccionado.Email ?? "No especificado")</span>
+                        </div>
+                        <div class="col-12">
+                            <strong>Dirección:</strong><br />
+                            <span class="text-muted">@(proveedorSeleccionado.Direccion ?? "No especificada")</span>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Fecha de Creación:</strong><br />
+                            <span class="text-muted">@proveedorSeleccionado.CreatedAt.ToString("dd/MM/yyyy HH:mm")</span>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Última Actualización:</strong><br />
+                            <span class="text-muted">@(proveedorSeleccionado.UpdatedAt?.ToString("dd/MM/yyyy HH:mm") ?? "Nunca")</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CerrarModalDetalle">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
-    private int currentCount = 0;
-
-    private void IncrementCount()
+    // Estado
+    private List<ProveedorDto> proveedores = new();
+    private ProveedorStatsDto? stats;
+    private bool cargando = true;
+    private bool isAdmin = false;
+    
+    // Filtros
+    private string? filtroNombre;
+    private string? filtroEstado;
+    
+    // Modal Crear/Editar
+    private bool mostrarModal = false;
+    private bool modoEdicion = false;
+    private bool guardando = false;
+    private ProveedorCreateDto proveedorForm = new();
+    private ProveedorDto proveedorSeleccionado = new();
+    private string? errorModal;
+    private string estadoSeleccionado = "ACTIVO";
+    
+    // Modal Detalle
+    private bool mostrarModalDetalle = false;
+    
+    // Mensajes
+    private string? mensajeExito;
+    private string? mensajeError;
+    
+    protected override async Task OnInitializedAsync()
     {
-        currentCount++;
+        try
+        {
+            // Verificar si es admin
+            var userRole = await AuthService.GetUserRoleAsync();
+            isAdmin = userRole == "admin";
+            
+            // Cargar datos
+            await CargarProveedores();
+            await CargarEstadisticas();
+        }
+        catch (Exception ex)
+        {
+            mensajeError = $"Error al cargar datos: {ex.Message}";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+    
+    private async Task CargarProveedores()
+    {
+        try
+        {
+            cargando = true;
+            proveedores = await ProveedorService.GetAllAsync(filtroEstado, filtroNombre);
+        }
+        catch (Exception ex)
+        {
+            mensajeError = $"Error al cargar proveedores: {ex.Message}";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+    
+    private async Task CargarEstadisticas()
+    {
+        try
+        {
+            stats = await ProveedorService.GetStatsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al cargar estadísticas: {ex.Message}");
+        }
+    }
+    
+    private void LimpiarFiltros()
+    {
+        filtroNombre = null;
+        filtroEstado = null;
+        CargarProveedores();
+    }
+    
+    // Modal Crear
+    private void MostrarModalCrear()
+    {
+        modoEdicion = false;
+        proveedorForm = new ProveedorCreateDto();
+        estadoSeleccionado = "ACTIVO"; // Resetear estado a default
+        errorModal = null;
+        mostrarModal = true;
+    }
+    
+    // Modal Editar
+    private void MostrarModalEditar(ProveedorDto proveedor)
+    {
+        modoEdicion = true;
+        proveedorSeleccionado = proveedor;
+        proveedorForm = new ProveedorCreateDto
+        {
+            Nit = proveedor.Nit, // No se puede editar
+            Nombre = proveedor.Nombre,
+            Telefono = proveedor.Telefono,
+            Email = proveedor.Email,
+            Direccion = proveedor.Direccion
+        };
+        estadoSeleccionado = proveedor.Estado; // Inicializar estado actual
+        errorModal = null;
+        mostrarModal = true;
+    }
+    
+    private void MostrarModalDetalle(ProveedorDto proveedor)
+    {
+        proveedorSeleccionado = proveedor;
+        mostrarModalDetalle = true;
+    }
+    
+    private void CerrarModal()
+    {
+        mostrarModal = false;
+        errorModal = null;
+    }
+    
+    private void CerrarModalDetalle()
+    {
+        mostrarModalDetalle = false;
+    }
+    
+    private async Task GuardarProveedor()
+    {
+        try
+        {
+            guardando = true;
+            errorModal = null;
+            
+            if (modoEdicion)
+            {
+                // Actualizar
+                var updateDto = new ProveedorUpdateDto
+                {
+                    Nombre = proveedorForm.Nombre,
+                    Telefono = proveedorForm.Telefono,
+                    Email = proveedorForm.Email,
+                    Direccion = proveedorForm.Direccion,
+                    Estado = estadoSeleccionado // Incluir estado en actualización
+                };
+                
+                await ProveedorService.UpdateAsync(proveedorSeleccionado.Id, updateDto);
+                mensajeExito = "Proveedor actualizado exitosamente";
+            }
+            else
+            {
+                // Crear
+                await ProveedorService.CreateAsync(proveedorForm);
+                mensajeExito = "Proveedor registrado exitosamente";
+            }
+            
+            CerrarModal();
+            await CargarProveedores();
+            await CargarEstadisticas();
+        }
+        catch (InvalidOperationException ex)
+        {
+            errorModal = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            errorModal = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+    
+    private async Task ConfirmarDesactivar(ProveedorDto proveedor)
+    {
+        var confirmado = await JSRuntime.InvokeAsync<bool>("confirm", 
+            $"¿Está seguro de desactivar el proveedor '{proveedor.Nombre}'?");
+        
+        if (!confirmado) return;
+        
+        try
+        {
+            await ProveedorService.DeleteAsync(proveedor.Id);
+            mensajeExito = "Proveedor desactivado exitosamente";
+            await CargarProveedores();
+            await CargarEstadisticas();
+        }
+        catch (InvalidOperationException ex)
+        {
+            mensajeError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            mensajeError = $"Error al desactivar: {ex.Message}";
+        }
+    }
+    
+    private async Task ConfirmarActivar(ProveedorDto proveedor)
+    {
+        var confirmado = await JSRuntime.InvokeAsync<bool>("confirm", 
+            $"¿Está seguro de reactivar el proveedor '{proveedor.Nombre}'?");
+        
+        if (!confirmado) return;
+        
+        try
+        {
+            await ProveedorService.ActivateAsync(proveedor.Id);
+            mensajeExito = "Proveedor reactivado exitosamente";
+            await CargarProveedores();
+            await CargarEstadisticas();
+        }
+        catch (InvalidOperationException ex)
+        {
+            mensajeError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            mensajeError = $"Error al reactivar: {ex.Message}";
+        }
     }
 }

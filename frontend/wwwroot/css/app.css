@@ -529,3 +529,159 @@ label.form-label.busqueda-label {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+.notification-bell {
+    border: none;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.notification-bell:hover {
+    transform: scale(1.1);
+}
+
+.notification-bell:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+/* Dropdown de notificaciones */
+.notification-dropdown {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 0 !important;
+}
+
+.notification-dropdown .dropdown-item {
+    margin: 0 !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+}
+
+.notification-item {
+    padding: 0.75rem 1rem !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    border: none;
+    transition: background-color 0.2s ease;
+    white-space: normal !important;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.notification-item:hover {
+    background-color: #f8f9fa;
+}
+
+.notification-item .d-flex {
+    width: 100%;
+    gap: 0.5rem;
+}
+
+.notification-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+    width: 30px;
+    text-align: center;
+}
+
+/* Forzar wrap de texto en notificaciones */
+.notification-text {
+    white-space: normal !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    word-break: break-word !important;
+    hyphens: auto;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.dropdown-header {
+    padding: 0.75rem 1rem !important;
+    margin: 0 !important;
+    background-color: var(--color-primary-dark);
+    color: white;
+    font-weight: 600;
+    border-radius: 8px 8px 0 0;
+}
+
+.dropdown-footer {
+    padding: 0.75rem 1rem !important;
+    margin: 0 !important;
+    background-color: #f8f9fa;
+    border-radius: 0 0 8px 8px;
+    text-align: center !important;
+    list-style: none;
+}
+
+.dropdown-footer .btn {
+    margin: 0 !important;
+    padding: 0.5rem 1rem !important;
+    text-align: center !important;
+}
+
+/* Notificaciones toast */
+.toast-container {
+    position: fixed;
+    top: 70px;
+    right: 16px;
+    z-index: 9999;
+}
+
+.toast {
+    min-width: 300px;
+    max-width: 400px;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    border-width: 3px;
+    animation: slideInRight 0.3s ease;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.toast.border-danger {
+    border-left-color: #dc3545 !important;
+}
+
+.toast.border-warning {
+    border-left-color: #ffc107 !important;
+}
+
+.toast.border-info {
+    border-left-color: #0dcaf0 !important;
+}
+
+.toast.border-secondary {
+    border-left-color: #6c757d !important;
+}
+
+.toast-header {
+    background-color: rgba(0, 0, 0, 0.03);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.toast-body {
+    padding: 1rem;
+}
+
+/* Página de alertas */
+.title-style {
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(163, 196, 243, 0.1);
+}
