@@ -1,0 +1,50 @@
+@using FrontEndBlazor.Models
+
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999; margin-top: 70px;">
+    @foreach (var notification in ActiveNotifications.ToList())
+    {
+        var currentAlertId = notification.AlertId;
+        <div class="toast show @GetToastClass(notification)" role="alert" @key="notification.AlertId">
+            <div class="toast-header">
+                <strong class="me-auto">@notification.EventIcon @notification.EventLabel</strong>
+                <small>Ahora</small>
+                <button type="button" class="btn-close" @onclick="() => DismissNotification(currentAlertId)" @onclick:stopPropagation="true"></button>
+            </div>
+            <div class="toast-body">
+                <div class="fw-bold">@notification.MedicamentoNombre</div>
+                <div class="text-muted small">
+                    @notification.MedicamentoFabricante - @notification.MedicamentoPresentacion
+                    @if (!string.IsNullOrEmpty(notification.MedicamentoLote))
+                    {
+                        <span> (Lote: @notification.MedicamentoLote)</span>
+                    }
+                </div>
+                <div class="mt-1">@notification.Mensaje</div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public List<NotificacionDto> ActiveNotifications { get; set; } = new();
+    
+    [Parameter]
+    public EventCallback<string> OnDismiss { get; set; }
+    
+    private string GetToastClass(NotificacionDto notification)
+    {
+        return notification.Priority?.ToUpper() switch
+        {
+            "CRITICA" => "border-danger",
+            "ALTA" => "border-warning",
+            "MEDIA" => "border-info",
+            _ => "border-secondary"
+        };
+    }
+    
+    private async Task DismissNotification(string alertId)
+    {
+        await OnDismiss.InvokeAsync(alertId);
+    }
+}

@@ -14,6 +14,7 @@ from enum import Enum
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
 from utils.text import normalize_text
+from utils.validators import validate_uuid
 from schemas.movimiento import MovimientoCreate, MovimientoOut
 from schemas.audit import AuditLogOut
 
@@ -190,17 +191,51 @@ def listar_medicamentos(
 
 @router.get("/{med_id}", response_model=MedicamentoOut)
 def detalle_medicamento(med_id: str, service: MedicamentoService = Depends(get_medicamento_service), db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
+    # Validar que med_id sea un UUID válido
+    is_valid, error_msg = validate_uuid(med_id, "med_id")
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                'error': 'invalid_uuid',
+                'message': error_msg
+            }
+        )
+    
     m = db.query(models.Medicamento).filter(models.Medicamento.id == med_id).first()
     if not m:
-        raise HTTPException(status_code=404, detail="Medicamento no encontrado")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                'error': 'medicamento_not_found',
+                'message': f'Medicamento con ID {med_id} no encontrado'
+            }
+        )
     return m
 
 
 @router.put("/{med_id}", response_model=MedicamentoOut)
 def actualizar_medicamento(med_id: str, payload: MedicamentoUpdate, response: Response, service: MedicamentoService = Depends(get_medicamento_service), db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
+    # Validar que med_id sea un UUID válido
+    is_valid, error_msg = validate_uuid(med_id, "med_id")
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                'error': 'invalid_uuid',
+                'message': error_msg
+            }
+        )
+    
     m = db.query(models.Medicamento).filter(models.Medicamento.id == med_id).first()
     if not m:
-        raise HTTPException(status_code=404, detail="Medicamento no encontrado")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                'error': 'medicamento_not_found',
+                'message': f'Medicamento con ID {med_id} no encontrado'
+            }
+        )
 
     # validar y preparar cambios
     data = payload.model_dump(exclude_unset=True)
@@ -233,6 +268,17 @@ def actualizar_medicamento(med_id: str, payload: MedicamentoUpdate, response: Re
 
 @router.delete("/{med_id}", response_model=DeleteOut)
 def eliminar_medicamento(med_id: str, service: MedicamentoService = Depends(get_medicamento_service), db: Session = Depends(get_db), user: dict = Depends(require_admin)):
+    # Validar que med_id sea un UUID válido
+    is_valid, error_msg = validate_uuid(med_id, "med_id")
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                'error': 'invalid_uuid',
+                'message': error_msg
+            }
+        )
+    
     res = service.delete_medicamento(med_id, user.get('sub'))
     if res is None:
         raise HTTPException(status_code=404, detail="Medicamento no encontrado")
@@ -251,6 +297,17 @@ def reactivar_medicamento(med_id: str, service: MedicamentoService = Depends(get
     - Devuelve 200 con {reactivated: true, medicamento: {...}} si se reactiva exitosamente.
     - Devuelve 409 con detalle si no existe.
     """
+    # Validar que med_id sea un UUID válido
+    is_valid, error_msg = validate_uuid(med_id, "med_id")
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                'error': 'invalid_uuid',
+                'message': error_msg
+            }
+        )
+    
     res = service.reactivar_medicamento(med_id, user.get('sub'))
     if res is None:
         raise HTTPException(status_code=404, detail='Medicamento no encontrado')
@@ -279,10 +336,27 @@ def listar_movimientos_medicamento(
     Retorna movimientos ordenados cronológicamente (más recientes primero).
     Incluye entradas y salidas con información de usuario, fecha, cantidad y motivo.
     """
+    # Validar que med_id sea un UUID válido
+    is_valid, error_msg = validate_uuid(med_id, "med_id")
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                'error': 'invalid_uuid',
+                'message': error_msg
+            }
+        )
+    
     #Verificar que el medicamento existe
     m = db.query(models.Medicamento).filter(models.Medicamento.id == med_id).first()
     if not m:
-        raise HTTPException(status_code=404, detail="Medicamento no encontrado")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                'error': 'medicamento_not_found',
+                'message': f'Medicamento con ID {med_id} no encontrado'
+            }
+        )
     
     #Obtener movimientos ordenados por fecha descendente
     movimientos = db.query(models.Movimiento)\
@@ -296,6 +370,17 @@ def listar_movimientos_medicamento(
 
 @router.post("/{med_id}/movimientos", response_model=MovimientoOut)
 def crear_movimiento(med_id: str, payload: MovimientoCreate, service: MedicamentoService = Depends(get_medicamento_service), user: dict = Depends(get_current_user)):
+    # Validar que med_id sea un UUID válido
+    is_valid, error_msg = validate_uuid(med_id, "med_id")
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                'error': 'invalid_uuid',
+                'message': error_msg
+            }
+        )
+    
     tipo = payload.tipo.upper()
     if tipo not in ('ENTRADA', 'SALIDA'):
         raise HTTPException(status_code=400, detail='Tipo inválido, debe ser ENTRADA o SALIDA')
@@ -304,13 +389,38 @@ def crear_movimiento(med_id: str, payload: MovimientoCreate, service: Medicament
     if res.get('ok') is False:
         reason = res.get('reason')
         if reason == 'not_found':
-            raise HTTPException(status_code=404, detail='Medicamento no encontrado')
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    'error': 'medicamento_not_found',
+                    'message': f'Medicamento con ID {med_id} no encontrado'
+                }
+            )
         if reason == 'inactive' or reason == 'expired':
-            raise HTTPException(status_code=400, detail='No se pueden registrar los cambios debido a que el lote está inactivo o vencido')
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    'error': 'medicamento_inactive_or_expired',
+                    'message': 'No se pueden registrar cambios: el medicamento está inactivo o vencido'
+                }
+            )
         if reason == 'insufficient_stock':
             avail = res.get('available', 0)
-            raise HTTPException(status_code=400, detail=f'Stock disponible: {avail}. No se registró el movimiento.')
-        raise HTTPException(status_code=500, detail='Error al registrar movimiento')
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    'error': 'insufficient_stock',
+                    'message': f'Stock disponible: {avail}. No se registró el movimiento.',
+                    'available': avail
+                }
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                'error': 'movement_error',
+                'message': 'Error al registrar movimiento'
+            }
+        )
 
     mv = res.get('movimiento')
     return mv
@@ -343,10 +453,27 @@ def listar_auditoria_medicamento(
     - DEACTIVATE: Marcado como inactivo por tener dependencias
     - REACTIVATE: Reactivación de medicamento inactivo
     """
+    # Validar que med_id sea un UUID válido
+    is_valid, error_msg = validate_uuid(med_id, "med_id")
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                'error': 'invalid_uuid',
+                'message': error_msg
+            }
+        )
+    
     # Verificar que el medicamento existe
     m = db.query(models.Medicamento).filter(models.Medicamento.id == med_id).first()
     if not m:
-        raise HTTPException(status_code=404, detail="Medicamento no encontrado")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                'error': 'medicamento_not_found',
+                'message': f'Medicamento con ID {med_id} no encontrado'
+            }
+        )
     
     # Obtener logs de auditoría ordenados por fecha descendente
     audit_logs = db.query(models.AuditLog)\
