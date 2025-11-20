@@ -319,3 +319,90 @@ class DetalleOrdenCompra(Base):
     orden = relationship('OrdenCompra', back_populates='detalles')
     medicamento = relationship('Medicamento')
 
+
+class EstadoVentaEnum(enum.Enum):
+    PENDIENTE = 'PENDIENTE'
+    CONFIRMADA = 'CONFIRMADA'
+    CANCELADA = 'CANCELADA'
+
+
+class MetodoPagoEnum(enum.Enum):
+    EFECTIVO = 'EFECTIVO'
+    TARJETA = 'TARJETA'
+    TRANSFERENCIA = 'TRANSFERENCIA'
+    OTRO = 'OTRO'
+
+
+class Venta(Base):
+    """
+    Modelo para registro de ventas.
+    HU-3.01: Registro de Ventas
+    
+    Incluye:
+    - Registro de venta con estado
+    - Método de pago
+    - Totales calculados
+    - Auditoría completa
+    """
+    __tablename__ = 'ventas'
+    __table_args__ = (
+        UniqueConstraint('numero_venta', name='uq_ventas_numero'),
+    )
+    
+    id = Column(GUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    numero_venta = Column(String(50), nullable=False, unique=True)  # Ej: VT-2025-0001
+    
+    # Fechas y estado
+    fecha_venta = Column(DateTime, server_default=func.now())
+    estado = Column(Enum(EstadoVentaEnum), default=EstadoVentaEnum.PENDIENTE, nullable=False)
+    
+    # Pago
+    metodo_pago = Column(Enum(MetodoPagoEnum), nullable=True)
+    total = Column(Numeric(12, 2), nullable=False, server_default="0")
+    
+    # Cliente (opcional)
+    cliente_nombre = Column(String(200), nullable=True)
+    cliente_documento = Column(String(50), nullable=True)
+    
+    # Observaciones
+    observaciones = Column(String(500), nullable=True)
+    
+    # Auditoría
+    created_by = Column(String(100), nullable=True)  # Usuario que registró la venta
+    created_at = Column(DateTime, server_default=func.now())
+    confirmada_at = Column(DateTime, nullable=True)
+    cancelada_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, onupdate=func.now(), server_default=func.now())
+    
+    # Relaciones
+    detalles = relationship('DetalleVenta', back_populates='venta', cascade='all, delete-orphan')
+
+
+class DetalleVenta(Base):
+    """
+    Modelo para items/productos de una venta.
+    HU-3.01: Detalle de productos vendidos
+    
+    Incluye:
+    - Productos vendidos con cantidades
+    - Precios y subtotales
+    - Trazabilidad de lotes (FIFO/FEFO)
+    """
+    __tablename__ = 'detalle_venta'
+    
+    id = Column(GUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    venta_id = Column(GUID(), ForeignKey('ventas.id'), nullable=False)
+    medicamento_id = Column(GUID(), ForeignKey('medicamentos.id'), nullable=False)
+    
+    # Cantidades y precios
+    cantidad = Column(Integer, nullable=False)
+    precio_unitario = Column(Numeric(12, 2), nullable=False)
+    subtotal = Column(Numeric(12, 2), nullable=False)  # cantidad * precio_unitario
+    
+    # Información del lote (para trazabilidad FIFO/FEFO)
+    lote = Column(String(100), nullable=True)
+    
+    # Relaciones
+    venta = relationship('Venta', back_populates='detalles')
+    medicamento = relationship('Medicamento')
+

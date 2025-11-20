@@ -51,14 +51,17 @@ builder.Services.AddScoped<IMedicamentoService, MedicamentoService>();
 // Register AlertaService (uses AuthenticatedApi client)
 builder.Services.AddScoped<IAlertaService, AlertaService>();
 
-// Register ProveedorService (HU-4.01 - uses AuthenticatedApi client)
+// Register ProveedorService
 builder.Services.AddScoped<IProveedorService, ProveedorService>();
 
-// Register OrdenCompraService (HU-4.02 - uses AuthenticatedApi client)
+// Register OrdenCompraService
 builder.Services.AddScoped<IOrdenCompraService, OrdenCompraService>();
 
-// Register ReporteService (HU-4.03 - uses AuthenticatedApi client)
+// Register ReporteService
 builder.Services.AddScoped<IReporteService, ReporteService>();
+
+// Register VentaService
+builder.Services.AddScoped<IVentaService, VentaService>();
 
 var app = builder.Build();
 
