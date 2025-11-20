@@ -90,19 +90,20 @@ class StockAlertFactory(AlertFactory):
     
     HU-2.01: Alertas de stock bajo
     
-    Reglas de prioridad:
+    Reglas de prioridad ACTUALIZADAS:
     - stock = 0 → STOCK_AGOTADO / CRITICA
-    - stock < minimo/2 → STOCK_CRITICO / ALTA
-    - stock <= minimo → STOCK_MINIMO / MEDIA
+    - stock < minimo → STOCK_CRITICO / ALTA
+    - stock == minimo → STOCK_MINIMO / MEDIA
     """
     
     def calculate_type(self, stock: int, minimo_stock: int) -> TipoAlertaEnum:
         """Determina el tipo de alerta de stock según niveles."""
         if stock == 0:
             return TipoAlertaEnum.STOCK_AGOTADO
-        elif stock < minimo_stock / 2:
+        elif stock < minimo_stock:
+            # CAMBIO: Cualquier stock menor al mínimo es CRÍTICO
             return TipoAlertaEnum.STOCK_CRITICO
-        elif stock <= minimo_stock:
+        elif stock == minimo_stock:
             return TipoAlertaEnum.STOCK_MINIMO
         else:
             raise ValueError(
@@ -114,7 +115,8 @@ class StockAlertFactory(AlertFactory):
         """Calcula la prioridad según el nivel de stock."""
         if stock == 0:
             return PrioridadAlertaEnum.CRITICA
-        elif stock < minimo_stock / 2:
+        elif stock < minimo_stock:
+            # CAMBIO: Cualquier stock menor al mínimo es ALTA prioridad
             return PrioridadAlertaEnum.ALTA
         else:
             return PrioridadAlertaEnum.MEDIA
