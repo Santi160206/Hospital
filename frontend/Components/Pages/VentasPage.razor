@@ -1,12 +1,15 @@
-@page "/VentasPage"
+@page "/ventas"
 @using FrontEndBlazor.Models
 @using FrontEndBlazor.Services
+@inject IVentaService VentaService
 @inject IMedicamentoService MedicamentoService
 @inject IAuthService AuthService
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JS
 
 <PageTitle>Dashboard de Ventas</PageTitle>
 
+<<<<<<< HEAD
 <h3 class="mb-4">Resumen General</h3>
 
 @*<div class="grid grid-cols-4 gap-4">
@@ -33,16 +36,943 @@
         StockCritico = resumen.StockCritico;
     }
 }*@
+=======
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="title-style">🛒 Gestión de Ventas</h2>
+            <p class="text-muted">Sistema completo de ventas, reportes y proyecciones</p>
+        </div>
+        <div>
+            <button class="btn btn-add" @onclick="OpenCreateModal">
+                ➕ Nueva Venta (POS)
+            </button>
+            <button class="btn btn-outline-secondary ms-2" @onclick="LoadVentas">
+                Recargar
+            </button>
+        </div>
+    </div>
+>>>>>>> origin/SantiagoGG
 
-<p role="status">Current count: @currentCount</p>
+    <!-- Tabs de navegación -->
+    <ul class="nav nav-tabs mb-4">
+        <li class="nav-item">
+            <button class="nav-link @(activeTab == "ventas" ? "active" : "")" @onclick='() => activeTab = "ventas"'>
+                Ventas
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(activeTab == "estadisticas" ? "active" : "")" @onclick='() => activeTab = "estadisticas"'>
+                Estadísticas
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(activeTab == "reportes" ? "active" : "")" @onclick='() => activeTab = "reportes"'>
+                Reportes
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(activeTab == "proyecciones" ? "active" : "")" @onclick='() => activeTab = "proyecciones"'>
+                Proyecciones
+            </button>
+        </li>
+    </ul>
 
-<button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+    <!-- muestra el contenido según tab activa -->
+    @if (activeTab == "ventas")
+    {
+        @* listar ventas *@
+        <div>
+            <!-- los filtros esos -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Estado</label>
+                            <select class="form-select" @bind="filtroEstado">
+                                <option value="">Todos</option>
+                                <option value="PENDIENTE">Pendientes</option>
+                                <option value="CONFIRMADA">Confirmadas</option>
+                                <option value="CANCELADA">Canceladas</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Fecha Inicio</label>
+                            <input type="date" class="form-control" @bind="filtroFechaInicio" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Fecha Fin</label>
+                            <input type="date" class="form-control" @bind="filtroFechaFin" />
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button class="btn btn-search me-2" @onclick="AplicarFiltros" disabled="@loading">
+                                Buscar
+                            </button>
+                            <button class="btn btn-clean" @onclick="LimpiarFiltros" disabled="@loading">
+                                Limpiar filtros
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- pestaña de cargando -->
+            @if (loading)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary"></div>
+                    <p class="mt-3">Cargando ventas...</p>
+                </div>
+            }
+            else if (ventas == null || !ventas.Any())
+            {
+                <div class="alert alert-info">
+                    ℹ️ No se encontraron ventas.
+                </div>
+            }
+            else
+            {
+                <!-- tabla de ventas -->
+                <div class="card">
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Número</th>
+                                        <th>Fecha</th>
+                                        <th>Estado</th>
+                                        <th>Método Pago</th>
+                                        <th>Total</th>
+                                        <th>Cliente</th>
+                                        <th>Productos</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var venta in ventas)
+                                    {
+                                        <tr>
+                                            <td><strong>@venta.NumeroVenta</strong></td>
+                                            <td>@venta.FechaVenta.ToString("dd/MM/yyyy HH:mm")</td>
+                                            <td><span class="@venta.EstadoBadgeClass">@venta.Estado</span></td>
+                                            <td>
+                                                @if (venta.MetodoPago.HasValue)
+                                                {
+                                                    <span class="@venta.MetodoPagoBadgeClass">@venta.MetodoPago.Value</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">N/A</span>
+                                                }
+                                            </td>
+                                            <td><strong>$@venta.Total.ToString("N2")</strong></td>
+                                            <td>
+                                                @if (!string.IsNullOrEmpty(venta.ClienteNombre))
+                                                {
+                                                    @venta.ClienteNombre
+                                                    <br />
+                                                    <small class="text-muted">@venta.ClienteDocumento</small>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">Sin cliente</span>
+                                                }
+                                            </td>
+                                            <td>@venta.Detalles.Count item(s)</td>
+                                            <td style="align-items: center;">
+                                                <div class="btn-group btn-group-sm">
+                                                    <button class="btn btn-info" @onclick="() => OpenDetailModal(venta)" title="Ver detalle">
+                                                        Ver
+                                                    </button>
+                                                    @if (venta.Estado == EstadoVenta.PENDIENTE)
+                                                    {
+                                                        <button class="btn btn-success" @onclick="() => OpenConfirmPaymentModal(venta)" title="Confirmar pago">
+                                                            Pagar
+                                                        </button>
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="mt-3">
+                            <small class="text-muted">Mostrando @ventas.Count venta(s)</small>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else if (activeTab == "estadisticas")
+    {
+        @* estadísticas *@
+        <div>
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Fecha Inicio</label>
+                            <input type="date" class="form-control" @bind="statsDateStart" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Fecha Fin</label>
+                            <input type="date" class="form-control" @bind="statsDateEnd" />
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button class="btn btn-primary" @onclick="LoadEstadisticas" disabled="@loadingStats">
+                                @if (loadingStats)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Cargar Estadísticas
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (estadisticas != null)
+            {
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <div class="card bg-success text-white">
+                            <div class="card-body text-center">
+                                <h3>@estadisticas.TotalVentasConfirmadas</h3>
+                                <p class="mb-0">Ventas Confirmadas</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-warning text-dark">
+                            <div class="card-body text-center">
+                                <h3>@estadisticas.TotalVentasPendientes</h3>
+                                <p class="mb-0">Ventas Pendientes</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-info text-white">
+                            <div class="card-body text-center">
+                                <h3>$@estadisticas.TotalIngresos.ToString("N2")</h3>
+                                <p class="mb-0">Ingresos Totales</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-primary text-white">
+                            <div class="card-body text-center">
+                                <h3>$@estadisticas.PromedioVenta.ToString("N2")</h3>
+                                <p class="mb-0">Promedio por Venta</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-body">
+                        <h5 class="card-title">Medicamento Más Vendido</h5>
+                        <p class="fs-4">
+                            @if (!string.IsNullOrEmpty(estadisticas.MedicamentoMasVendido))
+                            {
+                                <strong>@estadisticas.MedicamentoMasVendido</strong>
+                            }
+                            else
+                            {
+                                <span class="text-muted">Sin datos</span>
+                            }
+                        </p>
+                        <small class="text-muted">Período: @estadisticas.PeriodoAnalizado</small>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else if (activeTab == "reportes")
+    {
+        @* reportes de ventas *@
+        <div>
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Reporte de Ventas por Período (HU-3.02)</h5>
+                </div>
+                <div class="card-body">
+                    <EditForm Model="filtrosReporte" OnValidSubmit="GenerarReporte">
+                        <DataAnnotationsValidator />
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Fecha Inicio *</label>
+                                <InputDate class="form-control" @bind-Value="filtrosReporte.FechaInicio" />
+                                <ValidationMessage For="@(() => filtrosReporte.FechaInicio)" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Fecha Fin *</label>
+                                <InputDate class="form-control" @bind-Value="filtrosReporte.FechaFin" />
+                                <ValidationMessage For="@(() => filtrosReporte.FechaFin)" />
+                                <small class="text-muted">Máximo 12 meses</small>
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <button type="submit" class="btn btn-primary w-100" disabled="@loadingReporte">
+                                    @if (loadingReporte)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2"></span>
+                                    }
+                                    Generar Reporte
+                                </button>
+                            </div>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+
+            @if (reporteVentas != null)
+            {
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">Resultados del Reporte</h5>
+                            <span class="badge bg-primary">
+                                @reporteVentas.FechaInicio.ToString("dd/MM/yyyy") - @reporteVentas.FechaFin.ToString("dd/MM/yyyy")
+                            </span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- Resumen -->
+                        <div class="row mb-4">
+                            <div class="col-md-4">
+                                <div class="border rounded p-3 text-center">
+                                    <h4>@reporteVentas.TotalVentas</h4>
+                                    <p class="mb-0 text-muted">Total Ventas</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="border rounded p-3 text-center">
+                                    <h4>@reporteVentas.TotalMedicamentos</h4>
+                                    <p class="mb-0 text-muted">Medicamentos Vendidos</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="border rounded p-3 text-center bg-success text-white">
+                                    <h4>$@reporteVentas.GranTotalIngresos.ToString("N2")</h4>
+                                    <p class="mb-0">Gran Total Ingresos</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!--tabla de ventas por medicamento -->
+                        @if (reporteVentas.VentasPorMedicamento.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Medicamento</th>
+                                            <th>Fabricante</th>
+                                            <th>Presentación</th>
+                                            <th class="text-end">Unidades</th>
+                                            <th class="text-end">Ventas</th>
+                                            <th class="text-end">Precio Prom.</th>
+                                            <th class="text-end">Total Ingresos</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var item in reporteVentas.VentasPorMedicamento)
+                                        {
+                                            <tr>
+                                                <td><strong>@item.MedicamentoNombre</strong></td>
+                                                <td>@item.MedicamentoFabricante</td>
+                                                <td>@item.MedicamentoPresentacion</td>
+                                                <td class="text-end">@item.TotalUnidades</td>
+                                                <td class="text-end">@item.NumeroVentas</td>
+                                                <td class="text-end">$@item.PrecioPromedio.ToString("N2")</td>
+                                                <td class="text-end"><strong>$@item.TotalIngresos.ToString("N2")</strong></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-info">
+                                ℹ️ @reporteVentas.Mensaje
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else if (activeTab == "proyecciones")
+    {
+        @* proyecciones de demanda *@
+        <div>
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Proyección de Demanda</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Período de Proyección *</label>
+                            <select class="form-select" @bind="filtrosProyeccion.PeriodoDias">
+                                <option value="30">30 días</option>
+                                <option value="60">60 días</option>
+                                <option value="90">90 días</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Meses de Historial *</label>
+                            <input type="number" class="form-control" @bind="filtrosProyeccion.MesesHistorico" min="6" max="24" />
+                            <small class="text-muted">Entre 6 y 24 meses</small>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button class="btn btn-primary w-100" @onclick="GenerarProyeccion" disabled="@loadingProyeccion">
+                                @if (loadingProyeccion)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Generar Proyección
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (proyeccionVentas != null)
+            {
+                <!-- Advertencias -->
+                @if (proyeccionVentas.Advertencias.Any())
+                {
+                    <div class="alert alert-warning">
+                        <strong>Advertencias:</strong>
+                        <ul class="mb-0 mt-2">
+                            @foreach (var advertencia in proyeccionVentas.Advertencias)
+                            {
+                                <li>@advertencia</li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">Proyecciones de Demanda</h5>
+                            <span class="badge bg-info">
+                                Proyección a @proyeccionVentas.PeriodoProyeccionDias días
+                            </span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        @if (proyeccionVentas.Proyecciones.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Medicamento</th>
+                                            <th>Fabricante</th>
+                                            <th class="text-end">Prom. Mensual</th>
+                                            <th class="text-end">Demanda Proyectada</th>
+                                            <th class="text-end">Stock Actual</th>
+                                            <th class="text-end">Stock Recomendado</th>
+                                            <th>Tendencia</th>
+                                            <th>Confianza</th>
+                                            <th>Reposición</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var item in proyeccionVentas.Proyecciones)
+                                        {
+                                            <tr class="@(item.RequiereReposicion ? "table-warning" : "")">
+                                                <td><strong>@item.MedicamentoNombre</strong></td>
+                                                <td>@item.MedicamentoFabricante</td>
+                                                <td class="text-end">@item.PromedioMensual.ToString("N2")</td>
+                                                <td class="text-end"><strong>@item.DemandaProyectada.ToString("N0")</strong></td>
+                                                <td class="text-end">@item.StockActual</td>
+                                                <td class="text-end">@item.StockRecomendado</td>
+                                                <td>
+                                                    @item.TendenciaIcon 
+                                                    <span class="@item.TendenciaBadgeClass">@item.Tendencia</span>
+                                                </td>
+                                                <td>
+                                                    <span class="@item.ConfianzaBadgeClass">@item.Confianza</span>
+                                                </td>
+                                                <td>
+                                                    @if (item.RequiereReposicion)
+                                                    {
+                                                        <span class="badge bg-danger">Requerida</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-success">OK</span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-info">
+                                ℹ️ @proyeccionVentas.Mensaje
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@* modales *@
+
+@* Modal de Detalle de Venta *@
+@if (showDetailModal && selectedVenta != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title">Detalle de Venta - @selectedVenta.NumeroVenta</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseDetailModal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Información general -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <p><strong>Número:</strong> @selectedVenta.NumeroVenta</p>
+                            <p><strong>Fecha:</strong> @selectedVenta.FechaVenta.ToString("dd/MM/yyyy HH:mm")</p>
+                            <p><strong>Estado:</strong> <span class="@selectedVenta.EstadoBadgeClass">@selectedVenta.Estado</span></p>
+                        </div>
+                        <div class="col-md-6">
+                            @if (selectedVenta.MetodoPago.HasValue)
+                            {
+                                <p><strong>Método de Pago:</strong> <span class="@selectedVenta.MetodoPagoBadgeClass">@selectedVenta.MetodoPago</span></p>
+                            }
+                            @if (!string.IsNullOrEmpty(selectedVenta.ClienteNombre))
+                            {
+                                <p><strong>Cliente:</strong> @selectedVenta.ClienteNombre</p>
+                                <p><strong>Documento:</strong> @selectedVenta.ClienteDocumento</p>
+                            }
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(selectedVenta.Observaciones))
+                    {
+                        <div class="alert alert-secondary">
+                            <strong>Observaciones:</strong> @selectedVenta.Observaciones
+                        </div>
+                    }
+
+                    <!-- Detalles de productos -->
+                    <h6 class="mb-3">Productos Vendidos</h6>
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Medicamento</th>
+                                    <th>Lote</th>
+                                    <th class="text-end">Precio Unit.</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var detalle in selectedVenta.Detalles)
+                                {
+                                    <tr>
+                                        <td>
+                                            <strong>@detalle.MedicamentoNombre</strong><br />
+                                            <small class="text-muted">
+                                                @detalle.MedicamentoPresentacion - @detalle.MedicamentoFabricante
+                                            </small>
+                                        </td>
+                                        <td>@detalle.Lote</td>
+                                        <td class="text-end">$@detalle.PrecioUnitario.ToString("N2")</td>
+                                        <td class="text-end">@detalle.Cantidad</td>
+                                        <td class="text-end"><strong>$@detalle.Subtotal.ToString("N2")</strong></td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="4" class="text-end">TOTAL:</th>
+                                    <th class="text-end">$@selectedVenta.Total.ToString("N2")</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <!-- Fechas de auditoría -->
+                    <div class="mt-3">
+                        <small class="text-muted">
+                            @if (selectedVenta.CreatedAt.HasValue)
+                            {
+                                <div>Creada: @selectedVenta.CreatedAt.Value.ToString("dd/MM/yyyy HH:mm")</div>
+                            }
+                            @if (selectedVenta.ConfirmadaAt.HasValue)
+                            {
+                                <div>Confirmada: @selectedVenta.ConfirmadaAt.Value.ToString("dd/MM/yyyy HH:mm")</div>
+                            }
+                            @if (selectedVenta.CanceladaAt.HasValue)
+                            {
+                                <div>Cancelada: @selectedVenta.CanceladaAt.Value.ToString("dd/MM/yyyy HH:mm")</div>
+                            }
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDetailModal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Modal de Confirmar Pago *@
+@if (showConfirmPaymentModal && selectedVenta != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">Confirmar Pago - @selectedVenta.NumeroVenta</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseConfirmPaymentModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <strong>Total a cobrar:</strong> $@selectedVenta.Total.ToString("N2")
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Método de Pago *</label>
+                        <select class="form-select" @bind="confirmPaymentMetodo">
+                            <option value="">Seleccionar...</option>
+                            <option value="EFECTIVO">Efectivo</option>
+                            <option value="TARJETA">Tarjeta</option>
+                            <option value="TRANSFERENCIA">Transferencia</option>
+                            <option value="OTRO">Otro</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Método de Descuento de Stock *</label>
+                        <select class="form-select" @bind="confirmPaymentDescuento">
+                            <option value="FEFO">FEFO (Vence Primero)</option>
+                            <option value="FIFO">FIFO (Ingresa Primero)</option>
+                        </select>
+                        <small class="text-muted">
+                            @if (confirmPaymentDescuento == "FEFO")
+                            {
+                                <span>📅 Se descuenta del lote con vencimiento más próximo</span>
+                            }
+                            else
+                            {
+                                <span>📦 Se descuenta del lote más antiguo</span>
+                            }
+                        </small>
+                    </div>
+
+                    <div class="alert alert-warning">
+                        <strong>⚠️ Importante:</strong> Al confirmar el pago, se descuenta el stock automáticamente y no se puede revertir.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseConfirmPaymentModal">Cancelar</button>
+                    <button type="button" class="btn btn-success" @onclick="ConfirmarPago" disabled="@(string.IsNullOrEmpty(confirmPaymentMetodo) || confirmingPayment)">
+                        @if (confirmingPayment)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        💳 Confirmar y Cobrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
-    private int currentCount = 0;
+    // Estado inicial
+    private string activeTab = "ventas";
+    private bool loading = false;
+    private List<VentaDto> ventas = new();
+    
+    // Filtros
+    private string filtroEstado = "";
+    private DateTime? filtroFechaInicio = null;
+    private DateTime? filtroFechaFin = null;
+    
+    // Estadísticas
+    private bool loadingStats = false;
+    private DateTime? statsDateStart = DateTime.Today.AddMonths(-1);
+    private DateTime? statsDateEnd = DateTime.Today;
+    private EstadisticasVentas? estadisticas = null;
+    
+    // Reportes
+    private bool loadingReporte = false;
+    private FiltrosReporteVentas filtrosReporte = new();
+    private ReporteVentasResponse? reporteVentas = null;
+    
+    // Proyecciones
+    private bool loadingProyeccion = false;
+    private FiltrosProyeccionVentas filtrosProyeccion = new();
+    private ProyeccionVentasResponse? proyeccionVentas = null;
 
-    private void IncrementCount()
+    // Modales
+    private bool showDetailModal = false;
+    private bool showConfirmPaymentModal = false;
+    private VentaDto? selectedVenta = null;
+    private string confirmPaymentMetodo = string.Empty;
+    private string confirmPaymentDescuento = "FEFO";
+    private bool confirmingPayment = false;
+
+    protected override async Task OnInitializedAsync()
     {
-        currentCount++;
+        try
+        {
+            // Verificar autenticación
+            await AuthService.LoadTokenAsync();
+            await Task.Delay(100);
+            
+            var isAuth = await AuthService.IsAuthenticatedAsync();
+            if (!isAuth)
+            {
+                NavigationManager.NavigateTo("/login", forceLoad: false);
+                return;
+            }
+            
+            // Cargar ventas
+            await LoadVentas();
+            
+            // Cargar estadísticas por defecto
+            await LoadEstadisticas();
+        }
+        catch (Exception ex)
+        {
+            await MostrarAlertaError($"Error al inicializar: {ex.Message}");
+        }
+    }
+
+    // ============= FUNCIONES DE CARGA =============
+    
+    private async Task LoadVentas()
+    {
+        try
+        {
+            loading = true;
+            
+            EstadoVenta? estado = null;
+            if (!string.IsNullOrEmpty(filtroEstado))
+            {
+                Enum.TryParse<EstadoVenta>(filtroEstado, out var e);
+                estado = e;
+            }
+            
+            ventas = await VentaService.GetAllAsync(estado, filtroFechaInicio, filtroFechaFin);
+        }
+        catch (Exception ex)
+        {
+            await MostrarAlertaError($"Error al cargar ventas: {ex.Message}");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+    
+    private async Task AplicarFiltros()
+    {
+        await LoadVentas();
+    }
+    
+    private async Task LimpiarFiltros()
+    {
+        filtroEstado = "";
+        filtroFechaInicio = null;
+        filtroFechaFin = null;
+        await LoadVentas();
+    }
+    
+    private async Task LoadEstadisticas()
+    {
+        try
+        {
+            loadingStats = true;
+            estadisticas = await VentaService.GetEstadisticasAsync(statsDateStart, statsDateEnd);
+        }
+        catch (Exception ex)
+        {
+            await MostrarAlertaError($"Error al cargar estadísticas: {ex.Message}");
+        }
+        finally
+        {
+            loadingStats = false;
+        }
+    }
+    
+    private async Task GenerarReporte()
+    {
+        try
+        {
+            // Validar rango de fechas
+            if (filtrosReporte.FechaFin < filtrosReporte.FechaInicio)
+            {
+                await MostrarAlertaError("La fecha fin debe ser mayor o igual a la fecha inicio");
+                return;
+            }
+            
+            var dias = (filtrosReporte.FechaFin - filtrosReporte.FechaInicio).Days;
+            if (dias > 365)
+            {
+                await MostrarAlertaError("El rango máximo permitido es de 12 meses (365 días)");
+                return;
+            }
+            
+            loadingReporte = true;
+            reporteVentas = await VentaService.GenerarReporteVentasAsync(filtrosReporte);
+            
+            if (reporteVentas == null)
+            {
+                await MostrarAlertaError("No se pudo generar el reporte");
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            await MostrarAlertaError(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            await MostrarAlertaError($"Error al generar reporte: {ex.Message}");
+        }
+        finally
+        {
+            loadingReporte = false;
+        }
+    }
+    
+    private async Task GenerarProyeccion()
+    {
+        try
+        {
+            loadingProyeccion = true;
+            proyeccionVentas = await VentaService.GenerarProyeccionDemandaAsync(filtrosProyeccion);
+            
+            if (proyeccionVentas == null)
+            {
+                await MostrarAlertaError("No se pudo generar la proyección");
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            await MostrarAlertaError(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            await MostrarAlertaError($"Error al generar proyección: {ex.Message}");
+        }
+        finally
+        {
+            loadingProyeccion = false;
+        }
+    }
+    
+    // ============= MODALES =============
+    
+    private void OpenCreateModal()
+    {
+        NavigationManager.NavigateTo("/ventas/crear");
+    }
+    
+    private void OpenDetailModal(VentaDto venta)
+    {
+        selectedVenta = venta;
+        showDetailModal = true;
+    }
+    
+    private void CloseDetailModal()
+    {
+        showDetailModal = false;
+        selectedVenta = null;
+    }
+    
+    private void OpenConfirmPaymentModal(VentaDto venta)
+    {
+        selectedVenta = venta;
+        confirmPaymentMetodo = string.Empty;
+        confirmPaymentDescuento = "FEFO";
+        showConfirmPaymentModal = true;
+    }
+    
+    private void CloseConfirmPaymentModal()
+    {
+        showConfirmPaymentModal = false;
+        selectedVenta = null;
+        confirmPaymentMetodo = string.Empty;
+    }
+    
+    private async Task ConfirmarPago()
+    {
+        if (selectedVenta == null || string.IsNullOrEmpty(confirmPaymentMetodo)) return;
+        
+        try
+        {
+            confirmingPayment = true;
+            
+            var dto = new VentaConfirmarPagoDto
+            {
+                MetodoPago = Enum.Parse<MetodoPago>(confirmPaymentMetodo),
+                MetodoDescuento = Enum.Parse<MetodoDescuento>(confirmPaymentDescuento)
+            };
+            
+            var result = await VentaService.ConfirmarPagoAsync(selectedVenta.Id, dto);
+            
+            await MostrarAlertaExito($"Pago confirmado exitosamente. Stock descontado usando {confirmPaymentDescuento}.");
+            
+            CloseConfirmPaymentModal();
+            await LoadVentas();
+        }
+        catch (InvalidOperationException ex)
+        {
+            await MostrarAlertaError(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            await MostrarAlertaError($"Error al confirmar pago: {ex.Message}");
+        }
+        finally
+        {
+            confirmingPayment = false;
+        }
+    }
+    
+    // ============= UTILIDADES =============
+    
+    private async Task MostrarAlertaExito(string mensaje)
+    {
+        await JS.InvokeVoidAsync("Swal.fire", new {
+            icon = "success",
+            title = "Éxito",
+            text = mensaje,
+            showConfirmButton = false,
+            timer = 2000
+        });
+    }
+
+    private async Task MostrarAlertaError(string mensaje)
+    {
+        await JS.InvokeVoidAsync("Swal.fire", new {
+            icon = "error",
+            title = "Error",
+            text = mensaje,
+            confirmButtonText = "Aceptar"
+        });
     }
 }
