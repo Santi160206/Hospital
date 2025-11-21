@@ -6,12 +6,16 @@ namespace FrontEndBlazor.Services;
 
 public interface IVentaService
 {
-    Task<VentaDto> CrearVentaAsync(VentaCreateDto dto);
-    Task<List<VentaDto>> ListarVentasAsync(DateTime? fechaInicio = null, DateTime? fechaFin = null, string? usuarioId = null, int limit = 100);
-    Task<VentaDto?> ObtenerVentaPorIdAsync(string id);
-    Task<ReporteCompletoDto> GenerarReporteVentasAsync(DateTime fechaInicio, DateTime fechaFin);
-    Task<ProyeccionDemandaDto> GenerarProyeccionDemandaAsync(int diasProyeccion = 30);
-    Task<object> ObtenerVentasDiariasAsync(DateTime fecha);
+    // CRUD de ventas
+    Task<VentaDto> CreateAsync(VentaCreateDto dto);
+    Task<List<VentaDto>> GetAllAsync(EstadoVenta? estado = null, DateTime? fechaInicio = null, DateTime? fechaFin = null);
+    Task<VentaDto?> GetByIdAsync(string id);
+    Task<VentaConfirmarResponse> ConfirmarPagoAsync(string id, VentaConfirmarPagoDto dto);
+    
+    //reportes y proyecciones
+    Task<ReporteVentasResponse?> GenerarReporteVentasAsync(FiltrosReporteVentas filtros);
+    Task<ProyeccionVentasResponse?> GenerarProyeccionDemandaAsync(FiltrosProyeccionVentas filtros);
+    Task<EstadisticasVentas?> GetEstadisticasAsync(DateTime? fechaInicio = null, DateTime? fechaFin = null);
 }
 
 public class VentaService : IVentaService
@@ -23,11 +27,13 @@ public class VentaService : IVentaService
     {
         _httpClientFactory = httpClientFactory;
         
+        //Configurar JSON options para que los enums se serialicen en mayusculas, así lo espera el backend
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
             PropertyNameCaseInsensitive = true,
-            NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString
+            NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString,
+            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
         };
     }
 
@@ -36,7 +42,10 @@ public class VentaService : IVentaService
         return _httpClientFactory.CreateClient("AuthenticatedApi");
     }
 
-    public async Task<VentaDto> CrearVentaAsync(VentaCreateDto dto)
+    /// <summary>
+    /// Crear nueva venta
+    /// </summary>
+    public async Task<VentaDto> CreateAsync(VentaCreateDto dto)
     {
         try
         {
@@ -46,30 +55,60 @@ public class VentaService : IVentaService
             
             if (!response.IsSuccessStatusCode)
             {
-                // Manejar errores específicos de ventas
+                // Parsear error
+                try
+                {
+                    var errorObj = JsonSerializer.Deserialize<Dictionary<string, object>>(content, _jsonOptions);
+                    if (errorObj != null && errorObj.ContainsKey("detail"))
+                    {
+                        var detail = errorObj["detail"]?.ToString();
+                        
+                        // Errores específicos
+                        if (content.Contains("insufficient_stock"))
+                        {
+                            throw new InvalidOperationException(detail ?? "Stock insuficiente para completar la venta");
+                        }
+                        
+                        throw new InvalidOperationException(detail ?? content);
+                    }
+                }
+                catch (JsonException) { }
+                
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    throw new InvalidOperationException("Medicamento no encontrado");
+                }
+                
                 if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
                 {
-                    try
-                    {
-                        var errorObj = JsonSerializer.Deserialize<ApiErrorResponse>(content, _jsonOptions);
-                        if (errorObj != null)
-                        {
-                            if (errorObj.Error == "Stock insuficiente")
-                            {
-                                throw new InvalidOperationException($"Stock insuficiente: {errorObj.Detail}");
-                            }
-                            throw new InvalidOperationException(errorObj.Detail ?? errorObj.Error ?? content);
-                        }
-                    }
-                    catch (JsonException)
-                    {
-                        // No es JSON, usar contenido directo
-                    }
+                    throw new InvalidOperationException(content);
+                }
+                
+                if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                {
+                    throw new InvalidOperationException("No tiene permisos para registrar ventas. Requiere rol de farmacéutico o administrador.");
                 }
                 
                 throw new HttpRequestException($"Error al crear venta: {response.StatusCode} - {content}");
             }
 
+            //parsear respuesta: puede ser StandardResponse o VentaDto directo
+            try
+            {
+                // Intentar parsear como StandardResponse primero
+                var standardResponse = await JsonSerializer.DeserializeAsync<StandardResponse<VentaDto>>(
+                    new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content)), 
+                    _jsonOptions
+                );
+                
+                if (standardResponse?.Data != null)
+                {
+                    return standardResponse.Data;
+                }
+            }
+            catch { }
+            
+            //fallback: parsear como VentaDto directo
             var venta = await response.Content.ReadFromJsonAsync<VentaDto>(_jsonOptions);
             return venta ?? throw new Exception("No se recibió la venta creada");
         }
@@ -87,11 +126,13 @@ public class VentaService : IVentaService
         }
     }
 
-    public async Task<List<VentaDto>> ListarVentasAsync(
+    /// <summary>
+    /// Listar ventas con filtros opcionales
+    /// </summary>
+    public async Task<List<VentaDto>> GetAllAsync(
+        EstadoVenta? estado = null, 
         DateTime? fechaInicio = null, 
-        DateTime? fechaFin = null, 
-        string? usuarioId = null, 
-        int limit = 100)
+        DateTime? fechaFin = null)
     {
         try
         {
@@ -99,10 +140,12 @@ public class VentaService : IVentaService
             
             // Construir query string
             var queryParams = new List<string>();
-            if (fechaInicio.HasValue) queryParams.Add($"fecha_inicio={fechaInicio.Value:yyyy-MM-dd}");
-            if (fechaFin.HasValue) queryParams.Add($"fecha_fin={fechaFin.Value:yyyy-MM-dd}");
-            if (!string.IsNullOrEmpty(usuarioId)) queryParams.Add($"usuario_id={Uri.EscapeDataString(usuarioId)}");
-            queryParams.Add($"limit={limit}");
+            if (estado.HasValue) 
+                queryParams.Add($"estado={estado.Value.ToString().ToUpper()}");
+            if (fechaInicio.HasValue) 
+                queryParams.Add($"fecha_inicio={fechaInicio.Value:yyyy-MM-dd}");
+            if (fechaFin.HasValue) 
+                queryParams.Add($"fecha_fin={fechaFin.Value:yyyy-MM-dd}");
             
             var queryString = queryParams.Count > 0 ? "?" + string.Join("&", queryParams) : "";
             var url = $"/api/ventas/{queryString}";
@@ -111,7 +154,8 @@ public class VentaService : IVentaService
             
             if (!response.IsSuccessStatusCode)
             {
-                throw new HttpRequestException($"Error al obtener ventas: {response.StatusCode}");
+                var error = await response.Content.ReadAsStringAsync();
+                throw new HttpRequestException($"Error al obtener ventas: {response.StatusCode} - {error}");
             }
 
             var ventas = await response.Content.ReadFromJsonAsync<List<VentaDto>>(_jsonOptions);
@@ -119,11 +163,15 @@ public class VentaService : IVentaService
         }
         catch (Exception ex)
         {
-            throw new Exception($"Error al obtener ventas: {ex.Message}", ex);
+            Console.WriteLine($"Error en GetAllAsync: {ex.Message}");
+            return new List<VentaDto>();
         }
     }
 
-    public async Task<VentaDto?> ObtenerVentaPorIdAsync(string id)
+    /// <summary>
+    ///obtener venta por ID
+    /// </summary>
+    public async Task<VentaDto?> GetByIdAsync(string id)
     {
         try
         {
@@ -143,77 +191,199 @@ public class VentaService : IVentaService
         }
         catch (Exception ex)
         {
-            throw new Exception($"Error al obtener venta: {ex.Message}", ex);
+            Console.WriteLine($"Error en GetByIdAsync: {ex.Message}");
+            return null;
         }
     }
 
-    public async Task<ReporteCompletoDto> GenerarReporteVentasAsync(DateTime fechaInicio, DateTime fechaFin)
+    /// <summary>
+    ///confirmar pago de venta pendiente
+    /// </summary>
+    public async Task<VentaConfirmarResponse> ConfirmarPagoAsync(string id, VentaConfirmarPagoDto dto)
     {
         try
         {
             var client = CreateClient();
-            var url = $"/api/ventas/reportes/ventas-periodo?fecha_inicio={fechaInicio:yyyy-MM-dd}&fecha_fin={fechaFin:yyyy-MM-dd}";
+            var response = await client.PostAsJsonAsync($"/api/ventas/{id}/confirmar-pago", dto, _jsonOptions);
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    throw new InvalidOperationException("Venta no encontrada");
+                }
+
+                if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+                {
+                    // Parsear mensaje específico
+                    try
+                    {
+                        var errorObj = JsonSerializer.Deserialize<Dictionary<string, object>>(content, _jsonOptions);
+                        if (errorObj != null && errorObj.ContainsKey("detail"))
+                        {
+                            var detail = errorObj["detail"]?.ToString();
+                            
+                            if (content.Contains("already_confirmed"))
+                            {
+                                throw new InvalidOperationException("La venta ya está confirmada");
+                            }
+                            if (content.Contains("cancelled"))
+                            {
+                                throw new InvalidOperationException("No se puede confirmar una venta cancelada");
+                            }
+                            if (content.Contains("insufficient_stock"))
+                            {
+                                throw new InvalidOperationException(detail ?? "Stock insuficiente para confirmar la venta");
+                            }
+                            
+                            throw new InvalidOperationException(detail ?? content);
+                        }
+                    }
+                    catch (JsonException) { }
+                    
+                    throw new InvalidOperationException(content);
+                }
+                
+                if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                {
+                    throw new InvalidOperationException("No tiene permisos para confirmar pagos.");
+                }
+
+                throw new HttpRequestException($"Error al confirmar pago: {response.StatusCode} - {content}");
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<VentaConfirmarResponse>(_jsonOptions);
+            return result ?? throw new Exception("No se recibió respuesta de confirmación");
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Error al confirmar pago: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Generar reporte de ventas por período
+    /// </summary>
+    public async Task<ReporteVentasResponse?> GenerarReporteVentasAsync(FiltrosReporteVentas filtros)
+    {
+        try
+        {
+            var client = CreateClient();
+            var response = await client.PostAsJsonAsync("/api/ventas/reportes/ventas", filtros, _jsonOptions);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Error en GenerarReporteVentasAsync: {response.StatusCode} - {errorContent}");
+                
+                if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+                {
+                    throw new InvalidOperationException($"Error de validación: {errorContent}");
+                }
+                
+                return null;
+            }
+
+            var reporte = await response.Content.ReadFromJsonAsync<ReporteVentasResponse>(_jsonOptions);
+            return reporte;
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error en GenerarReporteVentasAsync: {ex.Message}");
+            throw;
+        }
+    }
+
+    /// <summary>
+    ///generar proyección de demanda
+    /// </summary>
+    public async Task<ProyeccionVentasResponse?> GenerarProyeccionDemandaAsync(FiltrosProyeccionVentas filtros)
+    {
+        try
+        {
+            var client = CreateClient();
+            var response = await client.PostAsJsonAsync("/api/ventas/reportes/proyeccion", filtros, _jsonOptions);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Error en GenerarProyeccionDemandaAsync: {response.StatusCode} - {errorContent}");
+                
+                if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+                {
+                    throw new InvalidOperationException($"Error de validación: {errorContent}");
+                }
+                
+                return null;
+            }
+
+            var proyeccion = await response.Content.ReadFromJsonAsync<ProyeccionVentasResponse>(_jsonOptions);
+            return proyeccion;
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error en GenerarProyeccionDemandaAsync: {ex.Message}");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Obtener estadísticas generales de ventas
+    /// </summary>
+    public async Task<EstadisticasVentas?> GetEstadisticasAsync(DateTime? fechaInicio = null, DateTime? fechaFin = null)
+    {
+        try
+        {
+            var client = CreateClient();
+            
+            // Construir query string
+            var queryParams = new List<string>();
+            if (fechaInicio.HasValue) 
+                queryParams.Add($"fecha_inicio={fechaInicio.Value:yyyy-MM-dd}");
+            if (fechaFin.HasValue) 
+                queryParams.Add($"fecha_fin={fechaFin.Value:yyyy-MM-dd}");
+            
+            var queryString = queryParams.Count > 0 ? "?" + string.Join("&", queryParams) : "";
+            var url = $"/api/ventas/estadisticas{queryString}";
             
             var response = await client.GetAsync(url);
             
             if (!response.IsSuccessStatusCode)
             {
-                throw new HttpRequestException($"Error al generar reporte: {response.StatusCode}");
+                return null;
             }
 
-            var reporte = await response.Content.ReadFromJsonAsync<ReporteCompletoDto>(_jsonOptions);
-            return reporte ?? throw new Exception("No se recibió el reporte");
+            var stats = await response.Content.ReadFromJsonAsync<EstadisticasVentas>(_jsonOptions);
+            return stats;
         }
         catch (Exception ex)
         {
-            throw new Exception($"Error al generar reporte: {ex.Message}", ex);
+            Console.WriteLine($"Error en GetEstadisticasAsync: {ex.Message}");
+            return null;
         }
     }
+}
 
-    public async Task<ProyeccionDemandaDto> GenerarProyeccionDemandaAsync(int diasProyeccion = 30)
-    {
-        try
-        {
-            var client = CreateClient();
-            var url = $"/api/ventas/reportes/proyeccion-demanda?dias_proyeccion={diasProyeccion}";
-            
-            var response = await client.GetAsync(url);
-            
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new HttpRequestException($"Error al generar proyección: {response.StatusCode}");
-            }
-
-            var proyeccion = await response.Content.ReadFromJsonAsync<ProyeccionDemandaDto>(_jsonOptions);
-            return proyeccion ?? throw new Exception("No se recibió la proyección");
-        }
-        catch (Exception ex)
-        {
-            throw new Exception($"Error al generar proyección: {ex.Message}", ex);
-        }
-    }
-
-    public async Task<object> ObtenerVentasDiariasAsync(DateTime fecha)
-    {
-        try
-        {
-            var client = CreateClient();
-            var url = $"/api/ventas/reportes/ventas-diarias?fecha={fecha:yyyy-MM-dd}";
-            
-            var response = await client.GetAsync(url);
-            
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new HttpRequestException($"Error al obtener ventas diarias: {response.StatusCode}");
-            }
-
-            var contenido = await response.Content.ReadAsStringAsync();
-            var ventasDiarias = JsonSerializer.Deserialize<object>(contenido, _jsonOptions);
-            return ventasDiarias ?? new object();
-        }
-        catch (Exception ex)
-        {
-            throw new Exception($"Error al obtener ventas diarias: {ex.Message}", ex);
-        }
-    }
+/// <summary>
+/// Helper para parsear respuesta estándar del backend
+/// </summary>
+public class StandardResponse<T>
+{
+    public bool Ok { get; set; }
+    public string? Message { get; set; }
+    public T? Data { get; set; }
+    public string? Error { get; set; }
 }

@@ -1,0 +1,520 @@
+@page "/ventas/crear"
+@using FrontEndBlazor.Models
+@using FrontEndBlazor.Services
+@inject IVentaService VentaService
+@inject IMedicamentoService MedicamentoService
+@inject IAuthService AuthService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+
+<PageTitle>Nueva Venta - POS</PageTitle>
+
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="title-style">Punto de Venta (POS)</h2>
+            <p class="text-muted">Registro de ventas con FIFO/FEFO</p>
+        </div>
+        <button class="btn btn-outline-secondary" @onclick="VolverAVentas">
+            ← Volver a Ventas
+        </button>
+    </div>
+
+    <div class="row">
+        <!--columna izquierda: Productos -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">➕ Agregar Productos</h5>
+                </div>
+                <div class="card-body">
+                    <!--búsqueda de medicamentos -->
+                    <div class="mb-3">
+                        <label class="form-label">Buscar medicamento</label>
+                        <div class="position-relative">
+                            <input 
+                                type="text" 
+                                class="form-control" 
+                                placeholder="Buscar por nombre..."
+                                @bind="searchQuery"
+                                @bind:event="oninput"
+                                @onkeydown="HandleSearchKeydown" />
+                            
+                            @if (searchResults.Any() && showSearchResults)
+                            {
+                                <div class="autocomplete-suggestions">
+                                    @foreach (var med in searchResults)
+                                    {
+                                        <div class="suggestion-item" @onclick="() => SeleccionarMedicamento(med)">
+                                            <strong>@med.Nombre</strong><br />
+                                            <small class="text-muted">
+                                                @med.Presentacion - @med.Fabricante (Lote: @med.Lote)
+                                            </small>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!--productos en el carrito -->
+                    @if (productosCarrito.Any())
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Producto</th>
+                                        <th>Lote</th>
+                                        <th class="text-end">Precio Unit.</th>
+                                        <th style="width: 120px;">Cantidad</th>
+                                        <th class="text-end">Subtotal</th>
+                                        <th style="width: 80px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in productosCarrito)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <strong>@item.MedicamentoNombre</strong><br />
+                                                <small class="text-muted">@item.MedicamentoPresentacion</small>
+                                            </td>
+                                            <td>@item.Lote</td>
+                                            <td class="text-end">
+                                                <input 
+                                                    type="number" 
+                                                    class="form-control form-control-sm text-end" 
+                                                    @bind="item.PrecioUnitario"
+                                                    @bind:event="oninput"
+                                                    step="0.01"
+                                                    min="0" />
+                                            </td>
+                                            <td>
+                                                <input 
+                                                    type="number" 
+                                                    class="form-control form-control-sm text-end" 
+                                                    @bind="item.Cantidad"
+                                                    @bind:event="oninput"
+                                                    min="1"
+                                                    max="@item.StockDisponible" />
+                                            </td>
+                                            <td class="text-end">
+                                                <strong>$@((item.PrecioUnitario * item.Cantidad).ToString("N2"))</strong>
+                                            </td>
+                                            <td class="text-center">
+                                                <button class="btn btn-danger btn-sm" @onclick="() => EliminarProducto(item)">
+                                                    Eliminar
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-info">
+                            ℹ️ No hay productos en el carrito. Busca y selecciona medicamentos para agregar.
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!--columna derecha: Resumen y pago -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">Resumen de Venta</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-3">
+                        <span>Productos:</span>
+                        <strong>@productosCarrito.Count</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-3">
+                        <span>Unidades:</span>
+                        <strong>@productosCarrito.Sum(p => p.Cantidad)</strong>
+                    </div>
+                    <hr />
+                    <div class="d-flex justify-content-between mb-3">
+                        <h5>TOTAL:</h5>
+                        <h5 class="text-success">$@CalcularTotal().ToString("N2")</h5>
+                    </div>
+
+                    <hr />
+
+                    <!-- info del cliente -->
+                    <div class="mb-3">
+                        <label class="form-label">Cliente (opcional)</label>
+                        <input type="text" class="form-control" @bind="clienteNombre" placeholder="Nombre del cliente" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Documento (opcional)</label>
+                        <input type="text" class="form-control" @bind="clienteDocumento" placeholder="Cédula/NIT" />
+                    </div>
+
+                    <!--metodo de descuento fifo/fefo -->
+                    <div class="mb-3">
+                        <label class="form-label">Método de Descuento de Stock *</label>
+                        <select class="form-select" @bind="metodoDescuento">
+                            <option value="FEFO">FEFO (Vence Primero)</option>
+                            <option value="FIFO">FIFO (Ingresa Primero)</option>
+                        </select>
+                        <small class="text-muted">
+                            @if (metodoDescuento == "FEFO")
+                            {
+                                <span>Descuenta del lote con vencimiento más próximo</span>
+                            }
+                            else
+                            {
+                                <span>Descuenta del lote más antiguo</span>
+                            }
+                        </small>
+                    </div>
+
+                    <!--método de pago -->
+                    <div class="mb-3">
+                        <label class="form-label">Método de Pago</label>
+                        <select class="form-select" @bind="metodoPago">
+                            <option value="">Seleccionar...</option>
+                            <option value="EFECTIVO">Efectivo</option>
+                            <option value="TARJETA">Tarjeta</option>
+                            <option value="TRANSFERENCIA">Transferencia</option>
+                            <option value="OTRO">Otro</option>
+                        </select>
+                    </div>
+
+                    <!--conffirmar pago inmediatamente -->
+                    <div class="form-check mb-3">
+                        <input 
+                            class="form-check-input" 
+                            type="checkbox" 
+                            id="confirmarPagoCheck"
+                            @bind="confirmarPago" />
+                        <label class="form-check-label" for="confirmarPagoCheck">
+                            <strong>Confirmar pago inmediatamente</strong><br />
+                            <small class="text-muted">
+                                Si se confirma, el stock se descuenta automáticamente
+                            </small>
+                        </label>
+                    </div>
+
+                    <!--observaciones -->
+                    <div class="mb-3">
+                        <label class="form-label">Observaciones</label>
+                        <textarea class="form-control" rows="2" @bind="observaciones" placeholder="Notas adicionales..."></textarea>
+                    </div>
+
+                    <!--botones -->
+                    <button 
+                        class="btn btn-success w-100 mb-2" 
+                        @onclick="ProcessarVenta"
+                        disabled="@(!productosCarrito.Any() || submitting || (confirmarPago && string.IsNullOrEmpty(metodoPago)))">
+                        @if (submitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        @if (confirmarPago)
+                        {
+                            <span>Confirmar Venta y Cobrar</span>
+                        }
+                        else
+                        {
+                            <span>Registrar Venta Pendiente</span>
+                        }
+                    </button>
+
+                    <button 
+                        class="btn btn-outline-danger w-100" 
+                        @onclick="LimpiarCarrito"
+                        disabled="@(!productosCarrito.Any() || submitting)">
+                        Limpiar Carrito
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    //búsqueda de productos
+    //private string searchQuery = string.Empty;
+    private List<MedicamentoDto> searchResults = new();
+    private bool showSearchResults = false;
+    private CancellationTokenSource searchCts = new();
+
+    //carrito de compras
+    private List<ProductoCarrito> productosCarrito = new();
+
+    //datos de la venta
+    private string clienteNombre = string.Empty;
+    private string clienteDocumento = string.Empty;
+    private string observaciones = string.Empty;
+    private string metodoPago = string.Empty;
+    private string metodoDescuento = "FEFO"; // Por defecto FEFO
+    private bool confirmarPago = false;
+    private bool submitting = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await AuthService.LoadTokenAsync();
+            await Task.Delay(100);
+            
+            var isAuth = await AuthService.IsAuthenticatedAsync();
+            if (!isAuth)
+            {
+                NavigationManager.NavigateTo("/login", forceLoad: false);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            await MostrarAlertaError($"Error al inicializar: {ex.Message}");
+        }
+    }
+
+    //búsqueda de medicamentos
+
+    private async Task BuscarMedicamentosAsync()
+    {
+        searchCts.Cancel();
+        searchCts = new CancellationTokenSource();
+
+        if (string.IsNullOrWhiteSpace(searchQuery) || searchQuery.Length < 2)
+        {
+            searchResults.Clear();
+            showSearchResults = false;
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(300, searchCts.Token);
+
+            //buscar medicamentos activos con stock disponible
+            var medicamentos = await MedicamentoService.GetAllAsync(
+                nombre: searchQuery,
+                estado: "ACTIVO"
+            );
+
+            searchResults = medicamentos
+                .Where(m => m.Stock > 0)
+                .Take(10)
+                .ToList();
+
+            showSearchResults = searchResults.Any();
+            StateHasChanged();
+        }
+        catch (TaskCanceledException) { }
+        catch (Exception ex)
+        {
+            await MostrarAlertaError($"Error al buscar: {ex.Message}");
+        }
+    }
+
+    private async Task HandleSearchKeydown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && searchResults.Any())
+        {
+            await SeleccionarMedicamento(searchResults.First());
+        }
+        else if (e.Key == "Escape")
+        {
+            showSearchResults = false;
+        }
+    }
+
+    private async Task SeleccionarMedicamento(MedicamentoDto medicamento)
+    {
+        //verificar si ya está en el carrito
+        var existe = productosCarrito.FirstOrDefault(p => p.MedicamentoId == medicamento.Id);
+        if (existe != null)
+        {
+            await MostrarAlertaWarning($"El producto '{medicamento.Nombre}' ya está en el carrito");
+            return;
+        }
+
+        //agregar al carrito
+        productosCarrito.Add(new ProductoCarrito
+        {
+            MedicamentoId = medicamento.Id,
+            MedicamentoNombre = medicamento.Nombre,
+            MedicamentoPresentacion = medicamento.Presentacion,
+            MedicamentoFabricante = medicamento.Fabricante,
+            Lote = medicamento.Lote,
+            PrecioUnitario = (decimal)medicamento.Precio,
+            Cantidad = 1,
+            StockDisponible = medicamento.Stock
+        });
+
+        //limpiar búsqueda
+        searchQuery = string.Empty;
+        searchResults.Clear();
+        showSearchResults = false;
+        StateHasChanged();
+    }
+
+    private void EliminarProducto(ProductoCarrito producto)
+    {
+        productosCarrito.Remove(producto);
+    }
+
+    private void LimpiarCarrito()
+    {
+        productosCarrito.Clear();
+        clienteNombre = string.Empty;
+        clienteDocumento = string.Empty;
+        observaciones = string.Empty;
+        metodoPago = string.Empty;
+        confirmarPago = false;
+    }
+
+    private decimal CalcularTotal()
+    {
+        return productosCarrito.Sum(p => p.PrecioUnitario * p.Cantidad);
+    }
+
+    //procesar venta
+
+    private async Task ProcessarVenta()
+    {
+        try
+        {
+            //validar
+            if (!productosCarrito.Any())
+            {
+                await MostrarAlertaError("Debe agregar al menos un producto al carrito");
+                return;
+            }
+
+            if (confirmarPago && string.IsNullOrEmpty(metodoPago))
+            {
+                await MostrarAlertaError("Debe seleccionar un método de pago para confirmar la venta");
+                return;
+            }
+
+            submitting = true;
+
+            //preparar DTO
+            var ventaDto = new VentaCreateDto
+            {
+                Detalles = productosCarrito.Select(p => new DetalleVentaCreateDto
+                {
+                    MedicamentoId = p.MedicamentoId,
+                    Cantidad = p.Cantidad,
+                    PrecioUnitario = p.PrecioUnitario
+                }).ToList(),
+                ClienteNombre = string.IsNullOrWhiteSpace(clienteNombre) ? null : clienteNombre,
+                ClienteDocumento = string.IsNullOrWhiteSpace(clienteDocumento) ? null : clienteDocumento,
+                Observaciones = string.IsNullOrWhiteSpace(observaciones) ? null : observaciones,
+                MetodoPago = !string.IsNullOrEmpty(metodoPago) ? Enum.Parse<MetodoPago>(metodoPago) : null,
+                MetodoDescuento = Enum.Parse<MetodoDescuento>(metodoDescuento),
+                ConfirmarPago = confirmarPago
+            };
+
+            //enviar al backend
+            var result = await VentaService.CreateAsync(ventaDto);
+
+            //mostrar éxito
+            if (confirmarPago)
+            {
+                await MostrarAlertaExito($"Venta {result.NumeroVenta} confirmada y cobrada exitosamente. Stock descontado usando {metodoDescuento}.");
+            }
+            else
+            {
+                await MostrarAlertaExito($"Venta {result.NumeroVenta} registrada como PENDIENTE. Puede confirmar el pago posteriormente.");
+            }
+
+            //limpiar y volver
+            LimpiarCarrito();
+            VolverAVentas();
+        }
+        catch (InvalidOperationException ex)
+        {
+            await MostrarAlertaError(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            await MostrarAlertaError($"Error al procesar venta: {ex.Message}");
+        }
+        finally
+        {
+            submitting = false;
+        }
+    }
+
+    //navegación
+    private void VolverAVentas()
+    {
+        NavigationManager.NavigateTo("/ventas");
+    }
+
+    //utilidades de alertas
+
+    private async Task MostrarAlertaExito(string mensaje)
+    {
+        await JS.InvokeVoidAsync("Swal.fire", new
+        {
+            icon = "success",
+            title = "Éxito",
+            text = mensaje,
+            showConfirmButton = false,
+            timer = 3000
+        });
+    }
+
+    private async Task MostrarAlertaError(string mensaje)
+    {
+        await JS.InvokeVoidAsync("Swal.fire", new
+        {
+            icon = "error",
+            title = "Error",
+            text = mensaje,
+            confirmButtonText = "Aceptar"
+        });
+    }
+
+    private async Task MostrarAlertaWarning(string mensaje)
+    {
+        await JS.InvokeVoidAsync("Swal.fire", new
+        {
+            icon = "warning",
+            title = "Atención",
+            text = mensaje,
+            confirmButtonText = "Entendido"
+        });
+    }
+
+    //modelos auxiliares
+
+    private class ProductoCarrito
+    {
+        public string MedicamentoId { get; set; } = string.Empty;
+        public string MedicamentoNombre { get; set; } = string.Empty;
+        public string MedicamentoPresentacion { get; set; } = string.Empty;
+        public string MedicamentoFabricante { get; set; } = string.Empty;
+        public string Lote { get; set; } = string.Empty;
+        public decimal PrecioUnitario { get; set; }
+        public int Cantidad { get; set; }
+        public int StockDisponible { get; set; }
+    }
+
+    private string _searchQuery = string.Empty;
+    private string searchQuery
+    {
+        get => _searchQuery;
+        set
+        {
+            if (_searchQuery == value) return;
+            _searchQuery = value;
+            _ = BuscarMedicamentosAsync();
+        }
+    }
+}

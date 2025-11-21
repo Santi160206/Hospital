@@ -1,202 +1,466 @@
+"""
+Routes para gestión de ventas.
+HU-3.01: Registro de Ventas con FIFO/FEFO
+HU-3.02: Reportes y Proyecciones de Ventas
+"""
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from datetime import date, datetime
 from database.connection import get_db
-from auth.security import get_current_user, require_farmaceutico, require_admin
-from schemas.venta import (
-    VentaCreate, VentaOut, ReporteVentaPeriodo, 
-    ReporteCompletoOut, VentasPorPeriodoOut, ProductoMasVendidoOut
-)
+from auth.security import get_current_user, require_farmaceutico_or_admin, require_admin
 from services.venta_service import VentaService
+from services.reporte_ventas_service import ReporteVentasService
+from schemas.venta import (
+    VentaCreate,
+    VentaResponse,
+    VentaConfirmarPago,
+    VentaConfirmarResponse,
+    FiltrosReporteVentas,
+    ReporteVentasResponse,
+    FiltrosProyeccionVentas,
+    ProyeccionVentasResponse,
+    EstadisticasVentas,
+    EstadoVentaEnum
+)
+from schemas.response import StandardResponse
+from typing import List, Optional, Union
+from pydantic import ValidationError
+from datetime import date
+
 
 router = APIRouter()
 
-def get_venta_service(db: Session = Depends(get_db)) -> VentaService:
-    return VentaService(db)
 
-@router.post("/", response_model=VentaOut, status_code=status.HTTP_201_CREATED)
-def crear_venta(
-    payload: VentaCreate,
-    service: VentaService = Depends(get_venta_service),
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_farmaceutico)
+# ==================== HEALTH CHECK ====================
+# Debe ir primero para no ser capturado por rutas dinámicas
+
+@router.get(
+    "/health",
+    summary="Health check del módulo de ventas",
+    tags=["ventas"]
+)
+def ventas_health():
+    """
+    Endpoint simple para verificar que el módulo de ventas está funcionando.
+    No requiere autenticación.
+    """
+    return {
+        "status": "ok",
+        "module": "ventas",
+        "message": "Módulo de ventas operativo"
+    }
+
+
+# ==================== ESTADÍSTICAS ====================
+# IMPORTANTE: Debe ir ANTES de /{venta_id} para no ser capturado
+
+@router.get(
+    "/estadisticas",
+    response_model=Union[EstadisticasVentas, StandardResponse],
+    summary="Obtener estadísticas de ventas",
+    description="Obtiene estadísticas generales de ventas en un período",
+    tags=["reportes-ventas"]
+)
+def obtener_estadisticas_ventas(
+    fecha_inicio: Optional[date] = Query(None),
+    fecha_fin: Optional[date] = Query(None),
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
 ):
-    """
-    Registrar una nueva venta
-    
-    HU: Como farmacéutico/administrador, quiero registrar automáticamente todas las ventas 
-    para tener historial, contabilizar y descontar stock.
-    
-    - Registra la venta con todos sus detalles
-    - Actualiza el stock de los medicamentos automáticamente
-    - Crea movimientos de salida para auditoría
-    - Valida que haya stock suficiente
-    """
-    venta_data = payload.model_dump()
-    usuario_id = user.get('sub')
-    
-    resultado = service.crear_venta(venta_data, usuario_id)
-    
-    if not resultado.get('ok'):
-        reason = resultado.get('reason')
-        if reason == 'medicamento_no_encontrado':
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Medicamento no encontrado: {resultado.get('medicamento_id')}"
-            )
-        elif reason == 'stock_insuficiente':
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "error": "Stock insuficiente",
-                    "medicamento": resultado.get('medicamento_nombre'),
-                    "stock_disponible": resultado.get('stock_disponible'),
-                    "cantidad_solicitada": resultado.get('cantidad_solicitada')
-                }
-            )
-        elif reason == 'error_transaccion':
+    """Obtiene estadísticas generales de ventas"""
+    try:
+        service = ReporteVentasService(db)
+        resultado = service.obtener_estadisticas_ventas(
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin
+        )
+        
+        if not resultado.get('ok', False):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Error al procesar la venta"
+                detail=resultado.get('message', 'Error al obtener estadísticas')
             )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Error al crear la venta"
-            )
-    
-    # Obtener la venta completa con detalles para la respuesta
-    venta_completa = service.obtener_venta_por_id(resultado['venta'].id)
-    return venta_completa
+        
+        return resultado
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error en obtener_estadisticas_ventas: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener estadísticas"
+        )
 
-@router.get("/", response_model=List[VentaOut])
-def listar_ventas(
-    fecha_inicio: Optional[date] = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
-    fecha_fin: Optional[date] = Query(None, description="Fecha fin (YYYY-MM-DD)"),
-    usuario_id: Optional[str] = Query(None, description="Filtrar por usuario"),
-    limit: int = Query(100, le=500, description="Límite de resultados"),
-    service: VentaService = Depends(get_venta_service),
-    user: dict = Depends(get_current_user)
+
+# ==================== REPORTES Y PROYECCIONES (HU-3.02) ====================
+# Deben ir ANTES de /{venta_id} para no ser capturados
+
+@router.post(
+    "/reportes/ventas",
+    response_model=Union[ReporteVentasResponse, StandardResponse],
+    summary="Generar reporte de ventas por período",
+    description="""
+    **HU-3.02: Reporte de Ventas**
+    
+    Genera reporte consolidado de ventas por período.
+    
+    **Características:**
+    - Muestra medicamentos vendidos con unidades e ingresos
+    - Calcula totales y subtotales automáticamente
+    - Rango máximo: 12 meses
+    
+    **Alcance:**
+    - Tabla con: Medicamento, Unidades vendidas, Ingresos totales
+    - Total general de ventas e ingresos
+    
+    **Solo para administradores**
+    """,
+    tags=["reportes-ventas"]
+)
+def generar_reporte_ventas(
+    filtros: FiltrosReporteVentas,
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
 ):
     """
-    Listar ventas con filtros opcionales
+    Genera reporte de ventas por período.
     
-    - Farmacéuticos ven solo sus ventas (a menos que sean admin)
-    - Admins ven todas las ventas
+    Given que ingreso un rango de fechas válido,
+    When genero el reporte de ventas,
+    Then veo una tabla con medicamentos vendidos, unidades e ingresos.
     """
-    # Si no es admin y no especificó usuario, filtrar por su propio usuario
-    if user.get('role') != 'admin' and usuario_id is None:
-        usuario_id = user.get('sub')
-    elif user.get('role') != 'admin' and usuario_id != user.get('sub'):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tiene permisos para ver ventas de otros usuarios"
+    try:
+        service = ReporteVentasService(db)
+        resultado = service.generar_reporte_ventas(
+            fecha_inicio=filtros.fecha_inicio,
+            fecha_fin=filtros.fecha_fin,
+            medicamento_id=filtros.medicamento_id,
+            estado=filtros.estado.value if filtros.estado else None
         )
-    
-    ventas = service.listar_ventas(fecha_inicio, fecha_fin, usuario_id, limit)
-    return ventas
+        
+        if not resultado.get('ok', False):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=resultado.get('message', 'Error al generar reporte')
+            )
+        
+        return resultado
+        
+    except ValidationError as ve:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ve)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error inesperado en generar_reporte_ventas: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al generar reporte"
+        )
 
-@router.get("/{venta_id}", response_model=VentaOut)
+
+@router.post(
+    "/reportes/proyeccion",
+    response_model=Union[ProyeccionVentasResponse, StandardResponse],
+    summary="Generar proyección de demanda",
+    description="""
+    **HU-3.02: Proyección de Ventas**
+    
+    Genera proyección de demanda basada en historial de ventas.
+    
+    **Método de cálculo:**
+    - Promedio móvil simple sobre historial
+    - Proyección = (Promedio mensual) × (Período en meses)
+    
+    **Requisitos:**
+    - Mínimo 6 meses de historial (ideal 12)
+    - Solo ventas confirmadas
+    
+    **Información incluida:**
+    - Demanda proyectada por medicamento
+    - Stock actual vs recomendado
+    - Tendencia (CRECIENTE, ESTABLE, DECRECIENTE)
+    - Nivel de confianza (ALTA, MEDIA, BAJA)
+    
+    **Solo para administradores**
+    """,
+    tags=["reportes-ventas"]
+)
+def generar_proyeccion_demanda(
+    filtros: FiltrosProyeccionVentas,
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Genera proyección de demanda.
+    
+    Given historial ventas 12 meses,
+    When solicito proyección a 90 días,
+    Then muestro estimación por medicamento y gráfico de tendencia.
+    """
+    try:
+        service = ReporteVentasService(db)
+        resultado = service.generar_proyeccion_demanda(
+            periodo_dias=int(filtros.periodo_dias.value),
+            meses_historico=filtros.meses_historico,
+            medicamento_id=filtros.medicamento_id
+        )
+        
+        if not resultado.get('ok', False):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=resultado.get('message', 'Error al generar proyección')
+            )
+        
+        return resultado
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error inesperado en generar_proyeccion_demanda: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al generar proyección"
+        )
+
+
+# ==================== CRUD DE VENTAS ====================
+
+@router.post(
+    "/",
+    response_model=StandardResponse,
+    summary="Crear nueva venta",
+    description="""
+    **HU-3.01: Registro de Ventas**
+    
+    Crea una nueva venta con o sin confirmación de pago.
+    
+    **Características:**
+    - Valida stock disponible antes de crear
+    - Si `confirmar_pago=True`, descuenta stock automáticamente usando FIFO/FEFO
+    - Genera número de venta automático (VT-2025-0001)
+    
+    **Métodos de descuento:**
+    - **FIFO**: First In, First Out (lote más antiguo primero)
+    - **FEFO**: First Expired, First Out (vencimiento más próximo primero)
+    
+    **Reglas de negocio:**
+    - No se permite vender productos sin stock
+    - Si un lote no tiene suficiente cantidad, se toma del siguiente automáticamente
+    - Solo farmacéuticos y administradores pueden registrar ventas
+    """,
+    tags=["ventas"]
+)
+def crear_venta(
+    venta: VentaCreate,
+    current_user: dict = Depends(require_farmaceutico_or_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Crea una venta nueva con opción de confirmar pago.
+    
+    Given venta completada en POS,
+    When confirmar pago,
+    Then crear registro de venta y disminuir stock por lotes FIFO/FEFO.
+    """
+    try:
+        service = VentaService(db)
+        
+        # Preparar detalles
+        detalles = [
+            {
+                'medicamento_id': d.medicamento_id,
+                'cantidad': d.cantidad,
+                'precio_unitario': d.precio_unitario
+            }
+            for d in venta.detalles
+        ]
+        
+        resultado = service.crear_venta(
+            detalles=detalles,
+            usuario_id=current_user['sub'],
+            metodo_pago=venta.metodo_pago.value if venta.metodo_pago else None,
+            cliente_nombre=venta.cliente_nombre,
+            cliente_documento=venta.cliente_documento,
+            observaciones=venta.observaciones,
+            metodo_descuento=venta.metodo_descuento.value,
+            confirmar_pago=venta.confirmar_pago
+        )
+        
+        if not resultado.get('ok', False):
+            status_code = status.HTTP_400_BAD_REQUEST
+            if resultado.get('error') == 'not_found':
+                status_code = status.HTTP_404_NOT_FOUND
+            elif resultado.get('error') == 'insufficient_stock':
+                status_code = status.HTTP_400_BAD_REQUEST
+            
+            raise HTTPException(
+                status_code=status_code,
+                detail=resultado.get('message', 'Error al crear venta')
+            )
+        
+        # Retornar respuesta estándar
+        return StandardResponse(
+            ok=True,
+            message=resultado.get('message', 'Venta creada exitosamente'),
+            data=resultado.get('data'),
+            error=None
+        )
+        
+    except ValidationError as ve:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ve)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error inesperado en crear_venta: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno del servidor al crear venta"
+        )
+
+
+@router.get(
+    "/",
+    response_model=List[VentaResponse],
+    summary="Listar ventas",
+    description="Obtiene lista de ventas con filtros opcionales",
+    tags=["ventas"]
+)
+def listar_ventas(
+    estado: Optional[EstadoVentaEnum] = Query(None, description="Filtrar por estado"),
+    fecha_inicio: Optional[date] = Query(None, description="Fecha inicio"),
+    fecha_fin: Optional[date] = Query(None, description="Fecha fin"),
+    current_user: dict = Depends(require_farmaceutico_or_admin),
+    db: Session = Depends(get_db)
+):
+    """Lista todas las ventas con filtros opcionales"""
+    try:
+        service = VentaService(db)
+        ventas = service.obtener_ventas(
+            estado=estado.value if estado else None,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin
+        )
+        return ventas
+        
+    except Exception as e:
+        print(f"Error en listar_ventas: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener ventas"
+        )
+
+
+# ==================== RUTAS CON PARÁMETROS DINÁMICOS ====================
+# IMPORTANTE: Estas rutas deben ir AL FINAL para no capturar rutas específicas
+
+@router.get(
+    "/{venta_id}",
+    response_model=Union[VentaResponse, StandardResponse],
+    summary="Obtener venta por ID",
+    description="Obtiene detalles completos de una venta",
+    tags=["ventas"]
+)
 def obtener_venta(
     venta_id: str,
-    service: VentaService = Depends(get_venta_service),
-    user: dict = Depends(get_current_user)
+    current_user: dict = Depends(require_farmaceutico_or_admin),
+    db: Session = Depends(get_db)
 ):
-    """
-    Obtener una venta específica por ID
-    """
-    venta = service.obtener_venta_por_id(venta_id)
-    if not venta:
+    """Obtiene una venta por su ID con todos los detalles"""
+    try:
+        service = VentaService(db)
+        venta = service.obtener_venta_por_id(venta_id)
+        
+        if not venta:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Venta no encontrada"
+            )
+        
+        return venta
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error en obtener_venta: {e}")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Venta no encontrada"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener venta"
         )
-    
-    # Validar permisos: solo admin o el usuario que creó la venta
-    if user.get('role') != 'admin' and str(venta.usuario_id) != user.get('sub'):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tiene permisos para ver esta venta"
-        )
-    
-    return venta
 
-@router.get("/reportes/ventas-periodo", response_model=ReporteCompletoOut)
-def generar_reporte_ventas_periodo(
-    fecha_inicio: date = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
-    fecha_fin: date = Query(..., description="Fecha fin (YYYY-MM-DD)"),
-    service: VentaService = Depends(get_venta_service),
-    user: dict = Depends(require_admin)
-):
-    """
-    Generar reporte completo de ventas por período
-    
-    HU: Como administrador, quiero generar reportes de ventas por período 
-    y proyecciones de demanda para planificar compras y stock.
-    
-    - Solo accesible para administradores
-    - Incluye: totales, productos más vendidos, ventas por día
-    """
-    if fecha_inicio > fecha_fin:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La fecha de inicio no puede ser mayor a la fecha fin"
-        )
-    
-    # Validar que el rango no sea muy grande (máximo 1 año)
-    if (fecha_fin - fecha_inicio).days > 365:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El rango de fechas no puede ser mayor a 1 año"
-        )
-    
-    reporte = service.generar_reporte_ventas(fecha_inicio, fecha_fin)
-    return reporte
 
-@router.get("/reportes/proyeccion-demanda")
-def generar_proyeccion_demanda(
-    dias_proyeccion: int = Query(30, ge=7, le=90, description="Días para proyección (7-90)"),
-    service: VentaService = Depends(get_venta_service),
-    user: dict = Depends(require_admin)
+@router.post(
+    "/{venta_id}/confirmar-pago",
+    response_model=Union[VentaConfirmarResponse, StandardResponse],
+    summary="Confirmar pago de venta pendiente",
+    description="""
+    **HU-3.01: Confirmación de Pago**
+    
+    Confirma el pago de una venta pendiente y descuenta stock automáticamente.
+    
+    **Regla de negocio:**
+    - "El registro solo debe generarse si el estado del pago = 'Confirmado'"
+    - Descuenta stock usando FIFO o FEFO según se especifique
+    - Registra movimientos de salida por cada lote afectado
+    """,
+    tags=["ventas"]
+)
+def confirmar_pago_venta(
+    venta_id: str,
+    confirmacion: VentaConfirmarPago,
+    current_user: dict = Depends(require_farmaceutico_or_admin),
+    db: Session = Depends(get_db)
 ):
     """
-    Generar proyección de demanda para planificación de stock
+    Confirma el pago de una venta pendiente.
     
-    HU: Como administrador, quiero proyecciones de demanda para planificar compras y stock.
-    
-    - Basado en ventas históricas de los últimos 90 días
-    - Incluye nivel de reorden recomendado
-    - Solo accesible para administradores
+    Given que una venta se completa en el POS,
+    When confirmo el pago,
+    Then se registra la venta en el historial y se descuenta el stock.
     """
-    proyeccion = service.obtener_proyeccion_demanda(dias_proyeccion)
-    return proyeccion
-
-@router.get("/reportes/ventas-diarias")
-def obtener_ventas_diarias(
-    fecha: date = Query(..., description="Fecha específica (YYYY-MM-DD)"),
-    service: VentaService = Depends(get_venta_service),
-    user: dict = Depends(get_current_user)
-):
-    """
-    Obtener resumen de ventas para una fecha específica
-    
-    - Admins ven todas las ventas del día
-    - Farmacéuticos ven solo sus ventas
-    """
-    if user.get('role') == 'admin':
-        usuario_id = None
-    else:
-        usuario_id = user.get('sub')
-    
-    ventas = service.listar_ventas(fecha, fecha, usuario_id, 1000)
-    
-    total_dia = sum(venta.total for venta in ventas)
-    cantidad_ventas = len(ventas)
-    
-    return {
-        "fecha": fecha,
-        "total_ventas": float(total_dia),
-        "cantidad_ventas": cantidad_ventas,
-        "ventas": ventas
-    }
+    try:
+        service = VentaService(db)
+        resultado = service.confirmar_pago_venta(
+            venta_id=venta_id,
+            metodo_pago=confirmacion.metodo_pago.value,
+            usuario_id=current_user['sub'],
+            metodo_descuento=confirmacion.metodo_descuento.value
+        )
+        
+        if not resultado.get('ok', False):
+            status_code = status.HTTP_400_BAD_REQUEST
+            if resultado.get('error') == 'not_found':
+                status_code = status.HTTP_404_NOT_FOUND
+            elif resultado.get('error') == 'already_confirmed':
+                status_code = status.HTTP_400_BAD_REQUEST
+            elif resultado.get('error') == 'cancelled':
+                status_code = status.HTTP_400_BAD_REQUEST
+            
+            raise HTTPException(
+                status_code=status_code,
+                detail=resultado.get('message', 'Error al confirmar pago')
+            )
+        
+        return resultado
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error inesperado en confirmar_pago_venta: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al confirmar pago"
+        )
