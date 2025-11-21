@@ -1,245 +1,584 @@
 """
-Service para lógica de negocio de ventas
+Service para gestión de ventas y reportes.
+HU-3.01: Registro de Ventas con FIFO/FEFO
+HU-3.02: Reportes y Proyecciones de Ventas
 """
-from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
+from sqlalchemy import func, and_, or_, desc, asc
+from database.models import (
+    Venta, DetalleVenta, Medicamento, Movimiento,
+    EstadoVentaEnum, MetodoPagoEnum, MovimientoTipoEnum,
+    EstadoEnum
+)
+from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, date, timedelta
 from decimal import Decimal
-
-from database import models
-from repositories.interfaces import IVentaRepository
-from repositories.venta_repo import VentaRepository
+from collections import defaultdict
+import uuid
 
 
 class VentaService:
-    def __init__(
-        self, 
-        db: Session, 
-        venta_repo: Optional[IVentaRepository] = None
-    ):
-        """Constructor con inyección de dependencias (DIP)."""
+    """
+    Service para lógica de ventas.
+    
+    HU-3.01: Registro de ventas con descuento automático FIFO/FEFO
+    HU-3.02: Reportes y proyecciones
+    """
+    
+    def __init__(self, db: Session):
         self.db = db
+    
+    def _generar_numero_venta(self) -> str:
+        """Genera número de venta consecutivo: VT-2025-0001"""
+        año_actual = datetime.now().year
         
-        if venta_repo is None:
-            self.venta_repo: IVentaRepository = VentaRepository(db)
-        else:
-            self.venta_repo = venta_repo
-
-    def crear_venta(self, venta_data: Dict[str, Any], usuario_id: str) -> Dict[str, Any]:
-        """Crea una nueva venta con sus detalles y actualiza stock"""
+        # Contar ventas del año actual
+        count = self.db.query(func.count(Venta.id)).filter(
+            func.extract('year', Venta.fecha_venta) == año_actual
+        ).scalar() or 0
+        
+        numero = count + 1
+        return f"VT-{año_actual}-{numero:04d}"
+    
+    def crear_venta(
+        self,
+        detalles: List[Dict[str, Any]],
+        usuario_id: str,
+        metodo_pago: Optional[str] = None,
+        cliente_nombre: Optional[str] = None,
+        cliente_documento: Optional[str] = None,
+        observaciones: Optional[str] = None,
+        metodo_descuento: str = "FEFO",
+        confirmar_pago: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Crea una venta nueva.
+        
+        HU-3.01: "Given venta completada en POS, When confirmar pago,
+                  Then crear registro de venta"
+        
+        Args:
+            detalles: Lista de items con medicamento_id, cantidad, precio_unitario
+            usuario_id: ID del usuario que registra
+            metodo_pago: Método de pago si se confirma
+            confirmar_pago: Si True, confirma automáticamente y descuenta stock
+            metodo_descuento: "FIFO" o "FEFO"
+        
+        Returns:
+            Dict con venta creada y desglose si se confirmó
+        """
         try:
-            # Calcular totales y validar stock
-            detalles_data = venta_data.get('detalles', [])
-            total_venta = Decimal('0')
-            detalles_a_crear = []
+            # Validar que haya detalles
+            if not detalles:
+                return {
+                    'ok': False,
+                    'error': 'validation_error',
+                    'message': 'Debe incluir al menos un producto en la venta'
+                }
             
-            # Validar stock y preparar detalles
-            for detalle in detalles_data:
-                medicamento = self.db.query(models.Medicamento).filter(
-                    models.Medicamento.id == detalle['medicamento_id'],
-                    models.Medicamento.estado == models.EstadoEnum.ACTIVO,
-                    models.Medicamento.is_deleted == False
+            # Validar stock disponible para cada producto
+            for item in detalles:
+                medicamento_id = item.get('medicamento_id')
+                cantidad_solicitada = item.get('cantidad')
+                
+                # Validar medicamento existe
+                medicamento = self.db.query(Medicamento).filter(
+                    Medicamento.id == medicamento_id,
+                    Medicamento.is_deleted == False,
+                    Medicamento.estado == EstadoEnum.ACTIVO
                 ).first()
                 
                 if not medicamento:
-                    return {'ok': False, 'reason': 'medicamento_no_encontrado', 'medicamento_id': detalle['medicamento_id']}
-                
-                if medicamento.stock < detalle['cantidad']:
                     return {
-                        'ok': False, 
-                        'reason': 'stock_insuficiente', 
-                        'medicamento_id': detalle['medicamento_id'],
-                        'medicamento_nombre': medicamento.nombre,
-                        'stock_disponible': medicamento.stock,
-                        'cantidad_solicitada': detalle['cantidad']
+                        'ok': False,
+                        'error': 'not_found',
+                        'message': f'Medicamento {medicamento_id} no encontrado o inactivo'
                     }
                 
-                # Usar precio del medicamento si no se especifica
-                precio_unitario = detalle.get('precio_unitario')
-                if precio_unitario is None:
-                    precio_unitario = float(medicamento.precio)
+                # Calcular stock total disponible para este medicamento
+                stock_total = self.db.query(func.sum(Medicamento.stock)).filter(
+                    Medicamento.nombre == medicamento.nombre,
+                    Medicamento.fabricante == medicamento.fabricante,
+                    Medicamento.presentacion == medicamento.presentacion,
+                    Medicamento.is_deleted == False,
+                    Medicamento.estado == EstadoEnum.ACTIVO
+                ).scalar() or 0
                 
-                subtotal = Decimal(str(precio_unitario)) * detalle['cantidad']
-                total_venta += subtotal
-                
-                detalles_a_crear.append({
-                    'medicamento_id': detalle['medicamento_id'],
-                    'cantidad': detalle['cantidad'],
-                    'precio_unitario': Decimal(str(precio_unitario)),
-                    'subtotal': subtotal,
-                    'medicamento_nombre': medicamento.nombre
-                })
+                if stock_total < cantidad_solicitada:
+                    return {
+                        'ok': False,
+                        'error': 'insufficient_stock',
+                        'message': f'Stock insuficiente para {medicamento.nombre}. Disponible: {stock_total}, Solicitado: {cantidad_solicitada}'
+                    }
             
-            # Crear la venta
-            nueva_venta = models.Venta(
-                usuario_id=usuario_id,
-                total=total_venta,
-                cliente=venta_data.get('cliente'),
-                notas=venta_data.get('notas')
+            # Crear venta
+            nueva_venta = Venta(
+                id=str(uuid.uuid4()),
+                numero_venta=self._generar_numero_venta(),
+                estado=EstadoVentaEnum.CONFIRMADA if confirmar_pago else EstadoVentaEnum.PENDIENTE,
+                metodo_pago=metodo_pago,
+                cliente_nombre=cliente_nombre,
+                cliente_documento=cliente_documento,
+                observaciones=observaciones,
+                created_by=usuario_id,
+                confirmada_at=datetime.now() if confirmar_pago else None
             )
             
-            # Usar el repository para crear la venta
-            nueva_venta = self.venta_repo.create(nueva_venta)
+            total = Decimal('0')
+            detalles_creados = []
+            desglose_descuento = []
             
-            # Crear detalles y actualizar stock
-            for detalle in detalles_a_crear:
-                # Crear detalle de venta
-                detalle_venta = models.DetalleVenta(
+            #se crean los detalles
+            for item in detalles:
+                medicamento_id = item.get('medicamento_id')
+                cantidad = item.get('cantidad')
+                precio_unitario = item.get('precio_unitario')
+                
+                #en casi, de, si no se provee precio, usar el del medicamento
+                if precio_unitario is None:
+                    medicamento = self.db.query(Medicamento).filter(
+                        Medicamento.id == medicamento_id
+                    ).first()
+                    precio_unitario = medicamento.precio
+                
+                precio_unitario = Decimal(str(precio_unitario))
+                subtotal = precio_unitario * cantidad
+                
+                detalle = DetalleVenta(
+                    id=str(uuid.uuid4()),
                     venta_id=nueva_venta.id,
-                    medicamento_id=detalle['medicamento_id'],
-                    cantidad=detalle['cantidad'],
-                    precio_unitario=detalle['precio_unitario'],
-                    subtotal=detalle['subtotal']
+                    medicamento_id=medicamento_id,
+                    cantidad=cantidad,
+                    precio_unitario=precio_unitario,
+                    subtotal=subtotal
                 )
-                self.db.add(detalle_venta)
                 
-                # Actualizar stock del medicamento
-                medicamento = self.db.query(models.Medicamento).filter(
-                    models.Medicamento.id == detalle['medicamento_id']
-                ).first()
-                medicamento.stock -= detalle['cantidad']
-                
-                # Registrar movimiento de salida
-                movimiento = models.Movimiento(
-                    medicamento_id=detalle['medicamento_id'],
-                    tipo=models.MovimientoTipoEnum.SALIDA,
-                    cantidad=detalle['cantidad'],
-                    usuario_id=usuario_id,
-                    motivo=f"Venta #{nueva_venta.id}"
-                )
-                self.db.add(movimiento)
+                detalles_creados.append(detalle)
+                total += subtotal
             
-            # Commit de toda la transacción
+            nueva_venta.total = total
+            
+            #garda venta y detalles
+            self.db.add(nueva_venta)
+            for detalle in detalles_creados:
+                self.db.add(detalle)
+            
+            self.db.flush()
+            
+            #si se confirma el pago, descontar stock
+            if confirmar_pago:
+                desglose = self._descontar_stock_venta(
+                    venta_id=nueva_venta.id,
+                    detalles=detalles_creados,
+                    usuario_id=usuario_id,
+                    metodo=metodo_descuento
+                )
+                desglose_descuento = desglose
+            
             self.db.commit()
             self.db.refresh(nueva_venta)
             
+            #se preparar response con todos los campos requeridos
+            # y además cargar detalles con información del medicamento
+            detalles_response = []
+            for detalle in detalles_creados:
+                medicamento = self.db.query(Medicamento).filter(
+                    Medicamento.id == detalle.medicamento_id
+                ).first()
+                
+                detalles_response.append({
+                    'id': detalle.id,
+                    'venta_id': detalle.venta_id,
+                    'medicamento_id': detalle.medicamento_id,
+                    'medicamento_nombre': medicamento.nombre if medicamento else None,
+                    'medicamento_fabricante': medicamento.fabricante if medicamento else None,
+                    'medicamento_presentacion': medicamento.presentacion if medicamento else None,
+                    'cantidad': detalle.cantidad,
+                    'precio_unitario': float(detalle.precio_unitario),
+                    'subtotal': float(detalle.subtotal),
+                    'lote': detalle.lote
+                })
+            
+            venta_dict = {
+                'id': nueva_venta.id,
+                'numero_venta': nueva_venta.numero_venta,
+                'fecha_venta': nueva_venta.fecha_venta,
+                'estado': nueva_venta.estado.value,
+                'metodo_pago': nueva_venta.metodo_pago.value if nueva_venta.metodo_pago else None,
+                'total': float(nueva_venta.total),
+                'cliente_nombre': nueva_venta.cliente_nombre,
+                'cliente_documento': nueva_venta.cliente_documento,
+                'observaciones': nueva_venta.observaciones,
+                'created_by': nueva_venta.created_by,
+                'created_at': nueva_venta.created_at,
+                'confirmada_at': nueva_venta.confirmada_at,
+                'cancelada_at': nueva_venta.cancelada_at,
+                'detalles': detalles_response
+            }
+            
+            response = {
+                'ok': True,
+                'message': 'Venta confirmada exitosamente' if confirmar_pago else 'Venta creada exitosamente',
+                'data': venta_dict
+            }
+            
+            if confirmar_pago:
+                response['desglose_descuento'] = desglose_descuento
+                response['mensaje'] = 'Venta confirmada y stock descontado exitosamente'
+            
+            return response
+            
+        except Exception as e:
+            self.db.rollback()
+            print(f"Error en crear_venta: {e}")
+            import traceback
+            traceback.print_exc()
             return {
-                'ok': True, 
-                'venta': nueva_venta,
-                'detalles': detalles_a_crear
+                'ok': False,
+                'error': 'database_error',
+                'message': f'Error al crear venta: {str(e)}'
+            }
+    
+    def _descontar_stock_venta(
+        self,
+        venta_id: str,
+        detalles: List[DetalleVenta],
+        usuario_id: str,
+        metodo: str = "FEFO"
+    ) -> List[Dict[str, Any]]:
+        """
+        Descuenta stock de medicamentos usando FIFO o FEFO.
+        
+        HU-3.01: "Then disminuir stock por lotes FIFO/FEFO"
+        
+        Reglas de negocio:
+        - FIFO: Descuenta del lote más antiguo (created_at)
+        - FEFO: Descuenta del lote con vencimiento más próximo
+        - Si un lote no tiene suficiente, toma del siguiente automáticamente
+        
+        Returns:
+            Lista con desglose de descuentos por lote
+        """
+        desglose = []
+        
+        try:
+            for detalle in detalles:
+                cantidad_restante = detalle.cantidad
+                medicamento_ref = self.db.query(Medicamento).filter(
+                    Medicamento.id == detalle.medicamento_id
+                ).first()
+                
+                if not medicamento_ref:
+                    continue
+                
+                # Obtener todos los lotes del mismo medicamento
+                query = self.db.query(Medicamento).filter(
+                    Medicamento.nombre == medicamento_ref.nombre,
+                    Medicamento.fabricante == medicamento_ref.fabricante,
+                    Medicamento.presentacion == medicamento_ref.presentacion,
+                    Medicamento.is_deleted == False,
+                    Medicamento.estado == EstadoEnum.ACTIVO,
+                    Medicamento.stock > 0
+                )
+                
+                # Ordenar según método
+                if metodo.upper() == "FIFO":
+                    #fifo: Más antiguo primero (created_at)
+                    query = query.order_by(asc(Medicamento.created_at))
+                else:  # FEFO
+                    # fefo: Vencimiento más próximo primero
+                    query = query.order_by(asc(Medicamento.fecha_vencimiento))
+                
+                lotes = query.all()
+                
+                # Descontar de cada lote hasta completar la cantidad
+                for lote in lotes:
+                    if cantidad_restante <= 0:
+                        break
+                    
+                    stock_anterior = lote.stock
+                    cantidad_a_descontar = min(cantidad_restante, lote.stock)
+                    
+                    # Descontar del lote
+                    lote.stock -= cantidad_a_descontar
+                    lote.updated_by = usuario_id
+                    
+                    # Registrar movimiento
+                    movimiento = Movimiento(
+                        id=str(uuid.uuid4()),
+                        medicamento_id=lote.id,
+                        tipo=MovimientoTipoEnum.SALIDA,
+                        cantidad=cantidad_a_descontar,
+                        usuario_id=usuario_id,
+                        motivo=f"Venta #{venta_id}",
+                        fecha=datetime.now()
+                    )
+                    self.db.add(movimiento)
+                    
+                    # Actualizar detalle de venta con el lote usado
+                    if cantidad_a_descontar == detalle.cantidad:
+                        detalle.lote = lote.lote
+                    
+                    # Agregar al desglose
+                    desglose.append({
+                        'medicamento_id': lote.id,
+                        'lote': lote.lote,
+                        'cantidad_descontada': cantidad_a_descontar,
+                        'stock_anterior': stock_anterior,
+                        'stock_nuevo': lote.stock,
+                        'fecha_vencimiento': lote.fecha_vencimiento
+                    })
+                    
+                    cantidad_restante -= cantidad_a_descontar
+                
+                # Verificar que se descontó toda la cantidad
+                if cantidad_restante > 0:
+                    raise Exception(
+                        f"No hay stock suficiente para completar la venta. "
+                        f"Faltaron {cantidad_restante} unidades"
+                    )
+            
+            return desglose
+            
+        except Exception as e:
+            print(f"Error en _descontar_stock_venta: {e}")
+            raise
+    
+    def confirmar_pago_venta(
+        self,
+        venta_id: str,
+        metodo_pago: str,
+        usuario_id: str,
+        metodo_descuento: str = "FEFO"
+    ) -> Dict[str, Any]:
+        """
+        Confirma el pago de una venta pendiente y descuenta stock.
+        
+        HU-3.01: "El registro solo debe generarse si el estado del pago = 'Confirmado'"
+        """
+        try:
+            venta = self.db.query(Venta).filter(Venta.id == venta_id).first()
+            
+            if not venta:
+                return {
+                    'ok': False,
+                    'error': 'not_found',
+                    'message': 'Venta no encontrada'
+                }
+            
+            if venta.estado == EstadoVentaEnum.CONFIRMADA:
+                return {
+                    'ok': False,
+                    'error': 'already_confirmed',
+                    'message': 'La venta ya está confirmada'
+                }
+            
+            if venta.estado == EstadoVentaEnum.CANCELADA:
+                return {
+                    'ok': False,
+                    'error': 'cancelled',
+                    'message': 'No se puede confirmar una venta cancelada'
+                }
+            
+            # Obtener detalles
+            detalles = self.db.query(DetalleVenta).filter(
+                DetalleVenta.venta_id == venta_id
+            ).all()
+            
+            # Descontar stock
+            desglose = self._descontar_stock_venta(
+                venta_id=venta_id,
+                detalles=detalles,
+                usuario_id=usuario_id,
+                metodo=metodo_descuento
+            )
+            
+            # Actualizar venta
+            venta.estado = EstadoVentaEnum.CONFIRMADA
+            venta.metodo_pago = metodo_pago
+            venta.confirmada_at = datetime.now()
+            
+            self.db.commit()
+            self.db.refresh(venta)
+            
+            # Cargar detalles con información del medicamento
+            detalles_query = self.db.query(
+                DetalleVenta,
+                Medicamento.nombre,
+                Medicamento.fabricante,
+                Medicamento.presentacion
+            ).join(
+                Medicamento, DetalleVenta.medicamento_id == Medicamento.id
+            ).filter(
+                DetalleVenta.venta_id == venta_id
+            ).all()
+            
+            detalles_response = [{
+                'id': d[0].id,
+                'venta_id': d[0].venta_id,
+                'medicamento_id': d[0].medicamento_id,
+                'medicamento_nombre': d[1],
+                'medicamento_fabricante': d[2],
+                'medicamento_presentacion': d[3],
+                'cantidad': d[0].cantidad,
+                'precio_unitario': float(d[0].precio_unitario),
+                'subtotal': float(d[0].subtotal),
+                'lote': d[0].lote
+            } for d in detalles_query]
+            
+            return {
+                'ok': True,
+                'venta': {
+                    'id': venta.id,
+                    'numero_venta': venta.numero_venta,
+                    'fecha_venta': venta.fecha_venta,
+                    'estado': venta.estado.value,
+                    'metodo_pago': venta.metodo_pago.value,
+                    'total': float(venta.total),
+                    'cliente_nombre': venta.cliente_nombre,
+                    'cliente_documento': venta.cliente_documento,
+                    'observaciones': venta.observaciones,
+                    'created_by': venta.created_by,
+                    'created_at': venta.created_at,
+                    'confirmada_at': venta.confirmada_at,
+                    'cancelada_at': venta.cancelada_at,
+                    'detalles': detalles_response
+                },
+                'desglose_descuento': desglose,
+                'mensaje': 'Pago confirmado y stock descontado exitosamente'
             }
             
         except Exception as e:
             self.db.rollback()
-            return {'ok': False, 'reason': 'error_transaccion', 'error': str(e)}
-
-    def obtener_venta_por_id(self, venta_id: str) -> Optional[models.Venta]:
-        """Obtiene una venta por su ID con sus detalles"""
-        return self.venta_repo.get(venta_id)
-
-    def listar_ventas(
-        self, 
+            print(f"Error en confirmar_pago_venta: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'ok': False,
+                'error': 'database_error',
+                'message': f'Error al confirmar pago: {str(e)}'
+            }
+    
+    def obtener_ventas(
+        self,
+        estado: Optional[str] = None,
         fecha_inicio: Optional[date] = None,
-        fecha_fin: Optional[date] = None,
-        usuario_id: Optional[str] = None,
-        limit: int = 100
-    ) -> List[models.Venta]:
-        """Lista ventas con filtros opcionales"""
-        # Convertir dates a strings para el repository
-        fecha_inicio_str = fecha_inicio.isoformat() if fecha_inicio else None
-        fecha_fin_str = fecha_fin.isoformat() if fecha_fin else None
-        
-        return self.venta_repo.list(
-            skip=0,
-            limit=limit,
-            fecha_inicio=fecha_inicio_str,
-            fecha_fin=fecha_fin_str,
-            usuario_id=usuario_id
-        )
-
-    def generar_reporte_ventas(
-        self, 
-        fecha_inicio: date, 
-        fecha_fin: date
-    ) -> Dict[str, Any]:
-        """Genera reporte completo de ventas para un período"""
-        # Ajustar fechas para incluir todo el día
-        fecha_inicio_dt = datetime.combine(fecha_inicio, datetime.min.time())
-        fecha_fin_dt = datetime.combine(fecha_fin, datetime.max.time())
-        
-        # Convertir a strings para el repository
-        fecha_inicio_str = fecha_inicio_dt.isoformat()
-        fecha_fin_str = fecha_fin_dt.isoformat()
-        
-        # Usar el repository para obtener datos
-        ventas_periodo = self.venta_repo.get_ventas_por_periodo(fecha_inicio_str, fecha_fin_str)
-        total_ventas = self.venta_repo.get_total_ventas_por_periodo(fecha_inicio_str, fecha_fin_str)
-        cantidad_ventas = self.venta_repo.get_cantidad_ventas_por_periodo(fecha_inicio_str, fecha_fin_str)
-        productos_mas_vendidos = self.venta_repo.get_productos_mas_vendidos(fecha_inicio_str, fecha_fin_str)
-        
-        # Ventas por día (usamos query directo por complejidad)
-        ventas_por_dia = self.db.query(
-            func.date(models.Venta.fecha).label('fecha'),
-            func.sum(models.Venta.total).label('total_dia'),
-            func.count(models.Venta.id).label('cantidad_ventas')
-        ).filter(
-            models.Venta.fecha.between(fecha_inicio_dt, fecha_fin_dt)
-        ).group_by(
-            func.date(models.Venta.fecha)
-        ).order_by(
-            func.date(models.Venta.fecha)
-        ).all()
-        
-        return {
-            'periodo': f"{fecha_inicio} a {fecha_fin}",
-            'total_ventas': total_ventas,
-            'cantidad_ventas': cantidad_ventas,
-            'ventas_promedio': total_ventas / cantidad_ventas if cantidad_ventas > 0 else 0,
-            'productos_mas_vendidos': [
-                {
-                    'medicamento_id': item.id,
-                    'medicamento_nombre': item.nombre,
-                    'cantidad_vendida': item.cantidad_vendida,
-                    'total_ventas': float(item.total_ventas)
-                }
-                for item in productos_mas_vendidos
-            ],
-            'ventas_por_dia': [
-                {
-                    'fecha': item.fecha.strftime('%Y-%m-%d'),
-                    'total_ventas': float(item.total_dia),
-                    'cantidad_ventas': item.cantidad_ventas
-                }
-                for item in ventas_por_dia
-            ]
-        }
-
-    def obtener_proyeccion_demanda(self, dias_proyeccion: int = 30) -> Dict[str, Any]:
-        """Genera proyección de demanda basada en ventas históricas"""
-        fecha_fin = date.today()
-        fecha_inicio = fecha_fin - timedelta(days=90)  # Últimos 90 días para análisis
-        
-        fecha_inicio_dt = datetime.combine(fecha_inicio, datetime.min.time())
-        fecha_fin_dt = datetime.combine(fecha_fin, datetime.max.time())
-        
-        fecha_inicio_str = fecha_inicio_dt.isoformat()
-        fecha_fin_str = fecha_fin_dt.isoformat()
-        
-        # Ventas históricas por producto
-        ventas_historicas = self.venta_repo.get_productos_mas_vendidos(
-            fecha_inicio_str, fecha_fin_str, limit=1000
-        )
-        
-        dias_analizados = (fecha_fin - fecha_inicio).days
-        
-        proyecciones = []
-        for item in ventas_historicas:
-            cantidad_vendida = item.cantidad_vendida or 0
-            promedio_diario = cantidad_vendida / dias_analizados if dias_analizados > 0 else 0
-            demanda_proyectada = promedio_diario * dias_proyeccion
+        fecha_fin: Optional[date] = None
+    ) -> List[Dict[str, Any]]:
+        """Obtiene lista de ventas con filtros opcionales"""
+        try:
+            query = self.db.query(Venta)
             
-            proyecciones.append({
-                'medicamento_id': item.id,
-                'medicamento_nombre': item.nombre,
-                'ventas_ultimos_90_dias': cantidad_vendida,
-                'promedio_diario': round(promedio_diario, 2),
-                'demanda_proyectada_30_dias': round(demanda_proyectada),
-                'nivel_reorden_recomendado': round(demanda_proyectada * 1.2)  # 20% extra
-            })
-        
-        return {
-            'periodo_analizado': f"{fecha_inicio} a {fecha_fin}",
-            'dias_proyeccion': dias_proyeccion,
-            'proyecciones': proyecciones
-        }
+            if estado:
+                query = query.filter(Venta.estado == estado)
+            
+            if fecha_inicio:
+                query = query.filter(func.date(Venta.fecha_venta) >= fecha_inicio)
+            
+            if fecha_fin:
+                query = query.filter(func.date(Venta.fecha_venta) <= fecha_fin)
+            
+            ventas = query.order_by(desc(Venta.fecha_venta)).all()
+            
+            resultado = []
+            for v in ventas:
+                # Obtener detalles con información del medicamento para cada venta
+                detalles = self.db.query(
+                    DetalleVenta,
+                    Medicamento.nombre,
+                    Medicamento.fabricante,
+                    Medicamento.presentacion
+                ).join(
+                    Medicamento, DetalleVenta.medicamento_id == Medicamento.id
+                ).filter(
+                    DetalleVenta.venta_id == v.id
+                ).all()
+                
+                detalles_response = [{
+                    'id': d[0].id,
+                    'venta_id': d[0].venta_id,
+                    'medicamento_id': d[0].medicamento_id,
+                    'medicamento_nombre': d[1],
+                    'medicamento_fabricante': d[2],
+                    'medicamento_presentacion': d[3],
+                    'cantidad': d[0].cantidad,
+                    'precio_unitario': float(d[0].precio_unitario),
+                    'subtotal': float(d[0].subtotal),
+                    'lote': d[0].lote
+                } for d in detalles]
+                
+                resultado.append({
+                    'id': v.id,
+                    'numero_venta': v.numero_venta,
+                    'fecha_venta': v.fecha_venta,
+                    'estado': v.estado.value,
+                    'metodo_pago': v.metodo_pago.value if v.metodo_pago else None,
+                    'total': float(v.total),
+                    'cliente_nombre': v.cliente_nombre,
+                    'cliente_documento': v.cliente_documento,
+                    'observaciones': v.observaciones,
+                    'created_by': v.created_by,
+                    'created_at': v.created_at,
+                    'confirmada_at': v.confirmada_at,
+                    'cancelada_at': v.cancelada_at,
+                    'detalles': detalles_response
+                })
+            
+            return resultado
+            
+        except Exception as e:
+            print(f"Error en obtener_ventas: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
+    def obtener_venta_por_id(self, venta_id: str) -> Optional[Dict[str, Any]]:
+        """Obtiene una venta por ID con sus detalles"""
+        try:
+            venta = self.db.query(Venta).filter(Venta.id == venta_id).first()
+            
+            if not venta:
+                return None
+            
+            #obtiene detalles con información del medicamento
+            detalles = self.db.query(
+                DetalleVenta,
+                Medicamento.nombre,
+                Medicamento.fabricante,
+                Medicamento.presentacion
+            ).join(
+                Medicamento, DetalleVenta.medicamento_id == Medicamento.id
+            ).filter(
+                DetalleVenta.venta_id == venta_id
+            ).all()
+            
+            return {
+                'id': venta.id,
+                'numero_venta': venta.numero_venta,
+                'fecha_venta': venta.fecha_venta,
+                'estado': venta.estado.value,
+                'metodo_pago': venta.metodo_pago.value if venta.metodo_pago else None,
+                'total': float(venta.total),
+                'cliente_nombre': venta.cliente_nombre,
+                'cliente_documento': venta.cliente_documento,
+                'observaciones': venta.observaciones,
+                'created_by': venta.created_by,
+                'created_at': venta.created_at,
+                'confirmada_at': venta.confirmada_at,
+                'detalles': [{
+                    'id': d[0].id,
+                    'venta_id': d[0].venta_id,  # ✅ AGREGADO: Campo requerido
+                    'medicamento_id': d[0].medicamento_id,
+                    'medicamento_nombre': d[1],
+                    'medicamento_fabricante': d[2],
+                    'medicamento_presentacion': d[3],
+                    'cantidad': d[0].cantidad,
+                    'precio_unitario': float(d[0].precio_unitario),
+                    'subtotal': float(d[0].subtotal),
+                    'lote': d[0].lote
+                } for d in detalles]
+            }
+            
+        except Exception as e:
+            print(f"Error en obtener_venta_por_id: {e}")
+            return None

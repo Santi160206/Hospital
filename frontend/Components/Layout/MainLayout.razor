@@ -51,13 +51,13 @@
         // Verificar autenticación
         isAuthenticated = await AuthService.IsAuthenticatedAsync();
         
-        // Solo iniciar polling si está autenticado (cada 5 segundos para actualización rápida)
+        // Solo iniciar polling si está autenticado (cada 2 minutos)
         if (isAuthenticated)
         {
             pollTimer = new System.Threading.Timer(async _ =>
             {
                 await CheckForNewAlerts();
-            }, null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+            }, null, TimeSpan.Zero, TimeSpan.FromSeconds(120));
         }
     }
 
