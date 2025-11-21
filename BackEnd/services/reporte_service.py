@@ -9,7 +9,7 @@ from database.models import (
     EstadoOrdenEnum, EstadoProveedorEnum
 )
 from typing import Optional, Dict, Any, List
-from datetime import date
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from collections import defaultdict
 
@@ -62,8 +62,8 @@ class ReporteService:
             ).filter(
                 and_(
                     OrdenCompra.estado == EstadoOrdenEnum.RECIBIDA,
-                    OrdenCompra.fecha_recepcion >= fecha_inicio,
-                    OrdenCompra.fecha_recepcion <= fecha_fin
+                    OrdenCompra.fecha_recepcion >= datetime.combine(fecha_inicio, datetime.min.time()),
+                    OrdenCompra.fecha_recepcion < datetime.combine(fecha_fin + timedelta(days=1), datetime.min.time())
                 )
             )
             
@@ -221,8 +221,8 @@ class ReporteService:
             ).filter(
                 and_(
                     OrdenCompra.estado == EstadoOrdenEnum.RECIBIDA,
-                    OrdenCompra.fecha_recepcion >= fecha_inicio,
-                    OrdenCompra.fecha_recepcion <= fecha_fin
+                    OrdenCompra.fecha_recepcion >= datetime.combine(fecha_inicio, datetime.min.time()),
+                    OrdenCompra.fecha_recepcion < datetime.combine(fecha_fin + timedelta(days=1), datetime.min.time())
                 )
             )
             
