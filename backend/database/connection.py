@@ -6,17 +6,14 @@ from urllib.parse import quote_plus
 
 load_dotenv()
 
-# Connection details for SQL Server with Windows Authentication
-SERVER = os.getenv('DB_SERVER', 'DESKTOP-UIQHK0S\\SQLEXPRESS')
-DATABASE = os.getenv('DB_NAME', 'ProyectoInvMedicamentos')
+SERVER = os.getenv('DB_SERVER')
+DATABASE = os.getenv('DB_NAME')
 
-# Build ODBC connection string and quote it for SQLAlchemy + pyodbc
 odbc_str = (
     f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={SERVER};DATABASE={DATABASE};Trusted_Connection=yes"
 )
 connection_string = "mssql+pyodbc:///?odbc_connect=" + quote_plus(odbc_str)
 
-# Create engine
 engine = create_engine(connection_string, echo=False, fast_executemany=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

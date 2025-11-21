@@ -9,34 +9,6 @@
 
 <PageTitle>Dashboard de Ventas</PageTitle>
 
-<<<<<<< HEAD
-<h3 class="mb-4">Resumen General</h3>
-
-@*<div class="grid grid-cols-4 gap-4">
-    <Card><CardContent><h4>@TotalVentas</h4><p>Ventas del Mes</p></CardContent></Card>
-    <Card><CardContent><h4>@TotalUnidades</h4><p>Medicamentos Vendidos</p></CardContent></Card>
-    <Card><CardContent><h4>@StockCritico</h4><p>Stock Crítico</p></CardContent></Card>
-    <Card><CardContent><h4>@IngresosTotales</h4><p>Ingresos</p></CardContent></Card>
-</div>
-
-<div class="mt-6 grid grid-cols-2 gap-6">
-    <Card><CardContent><VentasMensualesChart /></CardContent></Card>
-    <Card><CardContent><MedicamentosMasVendidosChart /></CardContent></Card>
-</div>
-
-@code{
-    private int TotalVentas { get; set; }
-    private int TotalUnidadesVendidas { get; set; }
-    private int StockCritico { get; set; }
-    protected override async Task OnInitializedAsync()
-    {
-        var resumen = await Http.GetFromJsonAsync<ResumenVentas>("api/dashboard/ventas/resumen");
-        TotalVentas = resumen.TotalVentas;
-        TotalUnidadesVendidas = resumen.TotalUnidadesVendidas;
-        StockCritico = resumen.StockCritico;
-    }
-}*@
-=======
 <div class="container-fluid mt-4">
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -53,7 +25,6 @@
             </button>
         </div>
     </div>
->>>>>>> origin/SantiagoGG
 
     <!-- Tabs de navegación -->
     <ul class="nav nav-tabs mb-4">
